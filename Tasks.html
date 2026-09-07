@@ -184,25 +184,54 @@ var STATE   = {};          // key -> {mode:'done'|'rev'|'no', reason:'', note:''
 var DATA    = null;
 var seq     = 0;
 
-/* ---------- JSONP, because Apps Script sends no CORS headers ---------- */
-function api(params, cb, onErr){
-  var name = 'tvlcb' + (++seq) + '_' + Date.now();
-  var timer = setTimeout(function(){ cleanup(); onErr && onErr('timeout'); }, 25000);
+/* ---------- JSONP, because Apps Script sends no CORS headers ----------
+   Apps Script answers a JSONP call by redirecting to googleusercontent,
+   which a phone on a weak signal drops more often than a desktop does.
+   So: a longer timeout, two automatic retries, a cache-buster, and a
+   real error on screen instead of a blank "no connection". */
+function api(params, cb, onErr, attempt){
+  attempt = attempt || 1;
 
-  window[name] = function(res){ clearTimeout(timer); cleanup(); cb(res); };
+  var name = 'tvlcb' + (++seq) + '_' + Date.now();
+  var s = null, done = false;
+
+  var timer = setTimeout(function(){ fail('timed out'); }, attempt === 1 ? 20000 : 30000);
+
+  window[name] = function(res){
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    cleanup();
+    cb(res);
+  };
 
   function cleanup(){
     try{ delete window[name]; }catch(e){ window[name] = undefined; }
     if (s && s.parentNode) s.parentNode.removeChild(s);
   }
 
+  function fail(why){
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    cleanup();
+
+    if (attempt < 3){
+      /* Wait a moment and go again. Most mobile failures are transient. */
+      setTimeout(function(){ api(params, cb, onErr, attempt + 1); }, attempt * 1200);
+      return;
+    }
+    onErr && onErr(why + ' after 3 tries');
+  }
+
   var q = Object.keys(params).map(function(k){
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
 
-  var s = document.createElement('script');
-  s.src = API_URL + '?' + q + '&callback=' + name;
-  s.onerror = function(){ clearTimeout(timer); cleanup(); onErr && onErr('network'); };
+  s = document.createElement('script');
+  s.referrerPolicy = 'no-referrer';
+  s.src = API_URL + '?' + q + '&callback=' + name + '&_=' + Date.now();
+  s.onerror = function(){ fail('blocked'); };
   document.body.appendChild(s);
 }
 
@@ -219,16 +248,31 @@ function load(){
     }
     DATA = res;
     render();
-  }, function(){
-    fail('No connection', 'Check your internet and reload the page.');
+  }, function(why){
+    fail('Could not reach the server',
+         'The page loaded but the task list did not (' + why + ').\n' +
+         'Check your signal and tap Retry. If it keeps failing, ' +
+         'tap View Tasks in WhatsApp for a fresh link.', true);
   });
 }
 
-function fail(title, msg){
+function fail(title, msg, retry){
   document.getElementById('who').textContent = '';
   document.getElementById('wrap').innerHTML =
-    '<div class="state"><div class="big">&#9888;</div><h2>' + esc(title) + '</h2><p>' + esc(msg) + '</p></div>';
+    '<div class="state"><div class="big">&#9888;</div><h2>' + esc(title) + '</h2>' +
+    '<p style="white-space:pre-line">' + esc(msg) + '</p>' +
+    (retry ? '<p style="margin-top:18px"><button id="retryBtn" style="border:0;' +
+      'border-radius:11px;padding:13px 26px;font:inherit;font-size:15px;font-weight:700;' +
+      'color:#fff;background:var(--navy);cursor:pointer">Retry</button></p>' : '') +
+    '</div>';
   document.getElementById('bar').style.display = 'none';
+
+  var b = document.getElementById('retryBtn');
+  if (b) b.addEventListener('click', function(){
+    document.getElementById('wrap').innerHTML =
+      '<div class="state"><div class="spin"></div><p>Trying again…</p></div>';
+    load();
+  });
 }
 
 /* ---------- render ---------- */
