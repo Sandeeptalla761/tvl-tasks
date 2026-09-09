@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e2f6b">
+<link rel="manifest" href="manifest-dash.json">
+<link rel="icon" href="https://sandeeptalla761.github.io/gatepass/icon-192.png">
+<link rel="apple-touch-icon" href="https://sandeeptalla761.github.io/gatepass/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>TVL Task Delegation</title>
+
+<!--
+  TVL TASK SYSTEM — dashboard.html
+  =====================================================================
+  The dashboard, hosted on GitHub Pages instead of served by Apps
+  Script.
+
+  WHY IT MOVED
+  ---------------------------------------------------------------------
+  Apps Script serves its pages inside an iframe and resolves the
+  request against whatever Google account the browser is signed into.
+  On a phone with several accounts that produced "Sorry, unable to open
+  the file at present" while the same URL worked on the PC.
+
+  A static page here has no such problem, and its calls to the API use
+  fetch with credentials omitted, so no Google cookies are sent and
+  Apps Script always answers as the public deployment. Works on any
+  account, or none.
+
+  It also means the dashboard can be installed to the home screen the
+  way the gate pass app is, which an Apps Script page cannot.
+
+  INSTALL
+  ---------------------------------------------------------------------
+  1. Commit this, manifest-dash.json and sw-dash.js to the tvl-tasks repo.
+  2. Add WebDash.gs to the Apps Script project and the one line it
+     names in Web.gs, then Deploy -> New version.
+  3. Open https://sandeeptalla761.github.io/tvl-tasks/dashboard.html
+  4. Chrome menu -> Add to Home screen.
+-->
+
+<style>
+  :root{
+    --navy:#1e2f6b; --navy2:#243a82; --blue:#2563eb;
+    --green:#16a34a; --green-bg:#dcfce7; --green-tx:#166534;
+    --amber:#f59e0b; --amber-bg:#fef3c7; --amber-tx:#92400e;
+    --red:#dc2626;   --red-bg:#fee2e2;   --red-tx:#b91c1c;
+    --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; --bg:#eef1f8; --card:#fff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+       background:var(--bg);color:var(--ink);}
+
+  .topbar{background:var(--navy);color:#fff;padding:12px 16px;
+          display:flex;align-items:center;gap:12px;position:relative;}
+  .topbar .logo{background:#fff;border-radius:9px;padding:5px;width:44px;height:44px;
+       display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .topbar .logo img{max-width:100%;max-height:100%;display:block;}
+  .topbar .co{font-size:13px;font-weight:700;line-height:1.25;}
+  .topbar .tag{font-size:8.5px;letter-spacing:2px;color:#b9c4f0;margin-top:2px;}
+  .topbar .sys{margin-left:auto;font-size:15px;font-weight:800;text-align:right;}
+  .dry{background:var(--amber-bg);color:var(--amber-tx);font-size:10px;font-weight:700;
+       padding:3px 9px;border-radius:999px;margin-left:8px;}
+
+  .tabs{background:#fff;border-bottom:1px solid var(--line);display:flex;padding:0 8px;
+        position:sticky;top:0;z-index:10;overflow-x:auto;}
+  .tabs button{border:0;background:none;font:inherit;font-size:13.5px;font-weight:600;
+        color:var(--muted);padding:14px 16px;cursor:pointer;border-bottom:3px solid transparent;
+        white-space:nowrap;}
+  .tabs button.on{color:var(--navy);border-bottom-color:var(--blue);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:14px 12px 70px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        box-shadow:0 1px 3px rgba(20,30,70,.06);margin-bottom:14px;}
+  .card h2{font-size:13px;letter-spacing:.5px;margin:0;padding:14px 16px;
+        border-bottom:1px solid var(--line);color:var(--navy);}
+  .card .body{padding:16px;}
+
+  label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.5px;
+        color:var(--muted);margin:0 0 6px;}
+  input,select,textarea{width:100%;font:inherit;font-size:15px;padding:11px 12px;
+        border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:var(--ink);}
+  textarea{resize:vertical;min-height:76px;}
+  .fld{margin-bottom:15px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;}
+  .hide{display:none !important;}
+
+  .seg{display:flex;gap:8px;flex-wrap:wrap;}
+  .seg button{font:inherit;font-size:13px;font-weight:600;padding:10px 16px;border-radius:9px;
+        border:1px solid #cbd5e1;background:#fff;color:var(--ink);cursor:pointer;}
+  .seg button.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+
+  .btn{font:inherit;font-size:14px;font-weight:700;padding:12px 20px;border-radius:9px;
+       border:1px solid #cbd5e1;background:#fff;color:var(--ink);cursor:pointer;}
+  .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .btn:disabled{opacity:.5;}
+  .btn.sm{font-size:12px;padding:7px 12px;}
+  .btn.done{color:var(--green-tx);border-color:#bbf0cd;}
+  .btn.rev{color:var(--amber-tx);border-color:#f0dfb0;}
+
+  .hint{font-size:12px;color:var(--muted);margin:-6px 0 14px;}
+  .msg{margin-top:12px;font-size:13px;font-weight:600;min-height:18px;}
+  .msg.ok{color:var(--green-tx);} .msg.err{color:var(--red-tx);}
+
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:10px;letter-spacing:.5px;color:var(--muted);text-align:left;padding:10px;
+     border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{font-size:13px;padding:10px;border-bottom:1px solid #f1f3f9;vertical-align:top;}
+  td .nm{font-weight:700;color:var(--navy);}
+  td .sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;}
+  .pill.daily{background:#eef1f8;color:#42506e;}
+  .pill.recurring{background:#e8effe;color:#1d4ed8;}
+  .pill.onetime{background:#f3e8ff;color:#6b21a8;}
+  .pill.late{background:var(--red-bg);color:var(--red-tx);}
+  .pill.rev{background:var(--amber-bg);color:var(--amber-tx);}
+  .pill.ok{background:var(--green-bg);color:var(--green-tx);}
+  .pill.open{background:#e8effe;color:#1d4ed8;}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px;}
+  .kpi .k{font-size:9.5px;letter-spacing:.7px;color:var(--muted);font-weight:700;}
+  .kpi .v{font-size:24px;font-weight:800;color:var(--navy);margin-top:5px;}
+  .kpi.g .v{color:var(--green-tx);} .kpi.a .v{color:var(--amber-tx);} .kpi.r .v{color:var(--red-tx);}
+
+  .bar{height:24px;border-radius:7px;background:#f1f3f9;overflow:hidden;position:relative;min-width:110px;}
+  .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:7px;}
+  .bar span{position:relative;z-index:1;font-size:12px;font-weight:800;line-height:24px;padding-left:8px;}
+
+  .empty{padding:40px;text-align:center;color:var(--muted);font-size:14px;}
+  .spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--navy);
+        border-radius:50%;animation:sp .8s linear infinite;margin:0 auto 12px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;
+         align-items:center;justify-content:center;z-index:50;padding:16px;}
+  .modal.on{display:flex;}
+  .modal .box{background:#fff;border-radius:14px;width:100%;max-width:420px;padding:20px;}
+  .modal h3{margin:0 0 4px;font-size:16px;color:var(--navy);}
+  .modal .t{font-size:13px;color:var(--muted);margin-bottom:14px;}
+  .modal .row{display:flex;gap:10px;margin-top:6px;}
+  .modal .row .btn{flex:1;}
+
+  .toast{position:fixed;left:50%;transform:translateX(-50%) translateY(12px);bottom:20px;
+         background:#111827;color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;
+         opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:92%;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .toast.good{background:var(--green-tx);} .toast.bad{background:var(--red-tx);}
+
+  /* gate: covers everything until the password is right */
+  .gate{position:fixed;inset:0;background:var(--bg);z-index:100;
+        display:flex;align-items:center;justify-content:center;padding:20px;}
+  .gate .box{width:100%;max-width:360px;text-align:center;}
+  .gate img{width:84px;margin-bottom:16px;}
+  .gate h1{font-size:19px;color:var(--navy);margin:0 0 6px;}
+  .gate p{font-size:13px;color:var(--muted);margin:0 0 20px;}
+  .gate .err{color:var(--red-tx);font-size:13px;font-weight:600;min-height:20px;margin-top:10px;}
+
+  @media(max-width:700px){
+    .topbar .tag{display:none;}
+    .topbar .sys{font-size:13px;}
+    .hide-sm{display:none;}
+    .card .body{padding:13px;}
+  }
+</style>
+</head>
+
+<body>
+
+<!-- password gate -->
+<div class="gate" id="gate">
+  <div class="box">
+    <img src="https://sandeeptalla761.github.io/gatepass/logo.png" alt="TVL"
+         onerror="this.style.display='none'">
+    <h1>Task Delegation System</h1>
+    <p>Trans Valves India Private Limited</p>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password">
+    <div class="err" id="pwErr"></div>
+    <button class="btn primary" id="pwGo" style="width:100%;margin-top:12px">Open</button>
+  </div>
+</div>
+
+<div class="topbar">
+  <div class="logo"><img src="https://sandeeptalla761.github.io/gatepass/logo.png" alt="TVL"
+       onerror="this.parentNode.style.display='none'"></div>
+  <div>
+    <div class="co" id="co">Trans Valves India Pvt Ltd</div>
+    <div class="tag">WHEN SAFETY MATTERS</div>
+  </div>
+  <div class="sys">Task Delegation<span class="dry hide" id="dryFlag">DRY RUN</span></div>
+</div>
+
+<div class="tabs">
+  <button class="on" data-tab="add">Add Task</button>
+  <button data-tab="pending">Pending</button>
+  <button data-tab="score">Score Card</button>
+  <button data-tab="report">Reports</button>
+</div>
+
+<div class="wrap">
+
+  <!-- ============ ADD ============ -->
+  <div id="tab-add">
+    <div class="card">
+      <h2>NEW TASK</h2>
+      <div class="body">
+        <div class="fld">
+          <label>WHAT KIND OF TASK</label>
+          <div class="seg" id="typeSeg">
+            <button data-t="DAILY">Daily</button>
+            <button data-t="RECURRING" class="on">Recurring</button>
+            <button data-t="ONETIME">One-time</button>
+          </div>
+        </div>
+        <div class="hint" id="typeHint"></div>
+
+        <div class="grid">
+          <div class="fld"><label>WHO IS IT FOR</label>
+            <select id="doer"><option value="">Choose a person…</option></select></div>
+          <div class="fld" id="freqWrap"><label>HOW OFTEN</label>
+            <select id="freq"></select></div>
+        </div>
+
+        <div class="fld"><label>WHAT HAS TO BE DONE</label>
+          <textarea id="task" maxlength="300"
+            placeholder="Describe the task clearly. This is what the doer sees on WhatsApp."></textarea></div>
+
+        <div class="grid">
+          <div class="fld" id="startWrap"><label>STARTS FROM</label><input type="date" id="start"></div>
+          <div class="fld" id="endWrap"><label>STOPS AFTER (OPTIONAL)</label><input type="date" id="end"></div>
+          <div class="fld hide" id="dueWrap"><label>DUE BY</label><input type="date" id="due"></div>
+          <div class="fld"><label>PRIORITY</label>
+            <select id="pri"><option>Normal</option><option>Urgent</option></select></div>
+        </div>
+
+        <button class="btn primary" id="addBtn" style="width:100%">Create task</button>
+        <div class="msg" id="addMsg"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PENDING ============ -->
+  <div id="tab-pending" class="hide">
+    <div class="card"><div class="body">
+      <div class="grid">
+        <div class="fld"><label>PERSON</label>
+          <select id="fDoer"><option value="">Everyone</option></select></div>
+        <div class="fld"><label>TYPE</label>
+          <select id="fType">
+            <option value="">All types</option>
+            <option value="DAILY">Daily</option>
+            <option value="RECURRING">Recurring</option>
+            <option value="ONETIME">One-time</option>
+          </select></div>
+        <div class="fld"><label>SHOW</label>
+          <select id="fScope">
+            <option value="all">Everything open</option>
+            <option value="today">Due today</option>
+            <option value="overdue">Overdue only</option>
+          </select></div>
+        <div class="fld"><label>SEARCH</label>
+          <input type="text" id="fQ" placeholder="Task or person…"></div>
+      </div>
+      <div class="seg">
+        <button class="btn" id="refreshBtn">Refresh</button>
+        <button class="btn" id="genBtn">Generate schedule</button>
+      </div>
+    </div></div>
+
+    <div class="card">
+      <h2 id="pendHead">OPEN TASKS</h2>
+      <div id="pendBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ============ SCORE ============ -->
+  <div id="tab-score" class="hide">
+    <div class="card"><div class="body"
+         style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <button class="btn" id="prevWk">&larr; Earlier</button>
+      <div style="font-weight:700;color:var(--navy);flex:1;text-align:center" id="wkLabel">…</div>
+      <button class="btn" id="nextWk">Later &rarr;</button>
+    </div></div>
+    <div class="kpis" id="scoreKpis"></div>
+    <div class="card">
+      <h2>SCORE BY PERSON</h2>
+      <div id="scoreBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ============ REPORTS ============ -->
+  <div id="tab-report" class="hide">
+    <div class="card">
+      <h2>SEARCH &amp; REPORTS</h2>
+      <div class="body">
+        <div class="grid">
+          <div class="fld"><label>FROM DATE</label><input type="date" id="rFrom"></div>
+          <div class="fld"><label>TO DATE</label><input type="date" id="rTo"></div>
+          <div class="fld"><label>DEPARTMENT</label>
+            <select id="rDept"><option value="">All</option></select></div>
+          <div class="fld"><label>DOER</label>
+            <select id="rDoer"><option value="">All</option></select></div>
+          <div class="fld"><label>FREQ</label><select id="rFreq"></select></div>
+          <div class="fld"><label>STATUS</label>
+            <select id="rStatus">
+              <option value="">All</option>
+              <option value="Completed">Completed</option>
+              <option value="Pending">Still open</option>
+              <option value="Not Completed">Not completed</option>
+              <option value="Lapsed">Lapsed</option>
+            </select></div>
+          <div class="fld"><label>SEARCH</label>
+            <input type="text" id="rQ" placeholder="Task, person or ID…"></div>
+        </div>
+        <div class="seg">
+          <button class="btn primary" id="rGo">Search</button>
+          <button class="btn" data-quick="today">Today</button>
+          <button class="btn" data-quick="yesterday">Yesterday</button>
+          <button class="btn" data-quick="week">Last 7 Days</button>
+          <button class="btn" data-quick="month">This Month</button>
+          <button class="btn" data-quick="reset">Reset</button>
+          <button class="btn" id="rCsv">Export CSV</button>
+          <button class="btn" id="rPdf">Export PDF</button>
+        </div>
+      </div>
+    </div>
+    <div id="rPdfLink" class="hide" style="margin:-4px 0 14px;font-size:13px;font-weight:600;"></div>
+    <div class="kpis" id="rKpis"></div>
+    <div class="card">
+      <h2 id="rHead">RESULTS</h2>
+      <div id="rBody"><div class="empty">Pick a date range and press Search.</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- revise dialog -->
+<div class="modal" id="revModal">
+  <div class="box">
+    <h3>Move this task</h3>
+    <div class="t" id="revTask"></div>
+    <div class="fld"><label>WHY</label><select id="revReason"></select></div>
+    <div class="fld"><label>NEW DATE</label><input type="date" id="revDate"></div>
+    <div class="fld"><label>IN YOUR OWN WORDS</label>
+      <textarea id="revNote" maxlength="200" style="min-height:56px"></textarea></div>
+    <div class="row">
+      <button class="btn" id="revCancel">Cancel</button>
+      <button class="btn primary" id="revSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== SET THIS to your Apps Script /exec URL ===== */
+var API_URL = 'https://script.google.com/macros/s/AKfycbx9R5YC8AZfpvV4c1Lmk8Eq8al41zj5mbmlxI11NixcxJQNTpwTNdya61C8noPM_HGy/exec';
+
+var PW    = '';
+var BOOT  = null, PEND = null, RPT = null, WKOFF = 0, TYPE = 'RECURRING', REVKEY = null;
+
+var HINTS = {
+  DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Up to 3 revisions, each costing 25 points.',
+  RECURRING: 'Repeats on the pattern you choose. Reminded the working day before, then daily until it is closed. Up to 3 revisions.',
+  ONETIME  : 'Sent the moment you create it, then daily until it is closed. Up to 3 revisions.'
+};
+
+/* ---------- transport ----------
+   fetch with credentials omitted. A cross-origin fetch sends no
+   cookies, so Apps Script always answers as the public deployment
+   rather than trying to resolve the request against whichever Google
+   account the phone happens to be signed into. That is the whole
+   reason this page lives on GitHub Pages instead of being served by
+   Apps Script directly. */
+function api(fn, params){
+  params = params || {};
+  params.api = 'dash';
+  params.fn  = fn;
+  params.pw  = PW;
+  params._   = Date.now();
+
+  var q = Object.keys(params).map(function(k){
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k] == null ? '' : params[k]);
+  }).join('&');
+
+  var ctrl = ('AbortController' in window) ? new AbortController() : null;
+  var timer = setTimeout(function(){ if (ctrl) ctrl.abort(); }, 30000);
+
+  return fetch(API_URL + '?' + q, {
+    method:'GET', credentials:'omit', redirect:'follow',
+    signal: ctrl ? ctrl.signal : undefined
+  })
+  .then(function(r){
+    clearTimeout(timer);
+    if (!r.ok) throw new Error('Server said ' + r.status);
+    return r.text();
+  })
+  .then(function(t){ return JSON.parse(t); });
+}
+
+/* ---------- gate ---------- */
+try { PW = localStorage.getItem('tvl_dash_pw') || ''; } catch(e){}
+
+document.getElementById('pwGo').addEventListener('click', tryPw);
+document.getElementById('pw').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') tryPw();
+});
+
+function tryPw(){
+  var v = document.getElementById('pw').value.trim();
+  if (!v){ document.getElementById('pwErr').textContent = 'Enter the password.'; return; }
+  PW = v;
+  unlock(true);
+}
+
+function unlock(remember){
+  var btn = document.getElementById('pwGo');
+  btn.disabled = true; btn.textContent = 'Checking…';
+  document.getElementById('pwErr').textContent = '';
+
+  api('boot').then(function(res){
+    btn.disabled = false; btn.textContent = 'Open';
+
+    if (!res.ok){
+      if (res.error === 'auth'){
+        PW = '';
+        try { localStorage.removeItem('tvl_dash_pw'); } catch(e){}
+        document.getElementById('gate').style.display = 'flex';
+        document.getElementById('pwErr').textContent = 'Wrong password.';
+        return;
+      }
+      document.getElementById('pwErr').textContent = res.message || 'Could not connect.';
+      return;
+    }
+
+    if (remember){ try { localStorage.setItem('tvl_dash_pw', PW); } catch(e){} }
+    document.getElementById('gate').style.display = 'none';
+    boot(res.boot);
+
+  }).catch(function(e){
+    btn.disabled = false; btn.textContent = 'Open';
+    document.getElementById('pwErr').textContent =
+      'Could not reach the server. Check your signal and try again.';
+  });
+}
+
+/* A remembered password opens the app without a prompt. */
+if (PW) unlock(false); else document.getElementById('pw').focus();
+
+/* ---------- boot ---------- */
+function boot(b){
+  BOOT = b;
+  document.getElementById('co').textContent = b.company;
+  if (b.dryRun) document.getElementById('dryFlag').classList.remove('hide');
+
+  document.getElementById('doer').innerHTML =
+    '<option value="">Choose a person…</option>' + b.doers.map(function(d){
+      return '<option value="' + esc(d.name) + '">' + esc(d.name) +
+             (d.dept ? ' — ' + esc(d.dept) : '') + '</option>';
+    }).join('');
+
+  ['fDoer','rDoer'].forEach(function(id){
+    document.getElementById(id).innerHTML =
+      '<option value="">' + (id === 'fDoer' ? 'Everyone' : 'All') + '</option>' +
+      b.doers.map(function(d){
+        return '<option value="' + esc(d.name) + '">' + esc(d.name) + '</option>';
+      }).join('');
+  });
+
+  document.getElementById('freq').innerHTML = b.frequencies.map(function(f){
+    return '<option value="' + esc(f.code) + '">' + esc(f.label) + '</option>';
+  }).join('');
+
+  document.getElementById('revReason').innerHTML = (b.reasons || []).map(function(r,i){
+    return '<option value="' + i + '">' + esc(r) + '</option>';
+  }).join('');
+
+  document.getElementById('rDept').innerHTML =
+    '<option value="">All</option>' + (b.depts || []).map(function(d){
+      return '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+    }).join('');
+
+  document.getElementById('rFreq').innerHTML =
+    '<option value="">All</option>' +
+    '<optgroup label="By type">' +
+      '<option value="DAILY">Daily</option>' +
+      '<option value="RECURRING">Recurring</option>' +
+      '<option value="ONETIME">One-time</option>' +
+    '</optgroup>' +
+    '<optgroup label="By frequency">' +
+      b.frequencies.map(function(f){
+        return '<option value="' + esc(f.code) + '">' + esc(f.label) + '</option>';
+      }).join('') +
+    '</optgroup>';
+
+  document.getElementById('start').value = b.today;
+  document.getElementById('due').value   = b.today;
+  setType('RECURRING');
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
+    b.classList.add('on');
+    ['add','pending','score','report'].forEach(function(t){
+      document.getElementById('tab-' + t).classList.toggle('hide', t !== b.dataset.tab);
+    });
+    if (b.dataset.tab === 'pending' && !PEND) loadPending();
+    if (b.dataset.tab === 'score') loadScores();
+    if (b.dataset.tab === 'report') initReport();
+  });
+});
+
+/* ---------- add ---------- */
+document.getElementById('typeSeg').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (b) setType(b.dataset.t);
+});
+
+function setType(t){
+  TYPE = t;
+  setMsg('addMsg','','');
+  document.querySelectorAll('#typeSeg button').forEach(function(x){
+    x.classList.toggle('on', x.dataset.t === t);
+  });
+  document.getElementById('typeHint').textContent = HINTS[t];
+  document.getElementById('freqWrap').classList.toggle('hide', t !== 'RECURRING');
+  document.getElementById('startWrap').classList.toggle('hide', t === 'ONETIME');
+  document.getElementById('endWrap').classList.toggle('hide', t === 'ONETIME');
+  document.getElementById('dueWrap').classList.toggle('hide', t !== 'ONETIME');
+}
+
+document.getElementById('addBtn').addEventListener('click', function(){
+  var btn = this;
+  var f = {
+    type: TYPE,
+    doer: document.getElementById('doer').value,
+    task: document.getElementById('task').value.trim(),
+    freq: document.getElementById('freq').value,
+    start: document.getElementById('start').value,
+    end: document.getElementById('end').value,
+    due: document.getElementById('due').value,
+    priority: document.getElementById('pri').value
+  };
+  if (!f.doer || !f.task){ setMsg('addMsg','Choose a person and describe the task.','err'); return; }
+
+  btn.disabled = true; btn.textContent = 'Creating…';
+  setMsg('addMsg','','');
+
+  api('add', f).then(function(r){
+    btn.disabled = false; btn.textContent = 'Create task';
+    setMsg('addMsg', r.message, r.ok ? 'ok' : 'err');
+    if (!r.ok) return;
+
+    document.getElementById('task').value = '';
+    PEND = null; RPT = null;
+    toast(r.message, 'good');
+
+    /* A one-time task is saved already; the WhatsApp goes out on a
+       second call so the form is not held up by the trip to Meta. */
+    if (r.sendRow){
+      api('sendnow', { row: r.sendRow, doer: r.doer }).then(function(s){
+        setMsg('addMsg', r.taskId + ' — ' + s.message, s.ok ? 'ok' : 'err');
+      }).catch(function(e){
+        setMsg('addMsg', r.taskId + ' saved, but the send failed: ' + e.message, 'err');
+      });
+    }
+  }).catch(function(e){
+    btn.disabled = false; btn.textContent = 'Create task';
+    setMsg('addMsg', e.message, 'err');
+  });
+});
+
+/* ---------- pending ---------- */
+['fDoer','fType','fScope'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', loadPending);
+});
+var qTimer;
+document.getElementById('fQ').addEventListener('input', function(){
+  clearTimeout(qTimer); qTimer = setTimeout(loadPending, 400);
+});
+document.getElementById('refreshBtn').addEventListener('click', loadPending);
+
+document.getElementById('genBtn').addEventListener('click', function(){
+  var b = this; b.disabled = true; b.textContent = 'Generating…';
+  api('generate').then(function(r){
+    b.disabled = false; b.textContent = 'Generate schedule';
+    toast(r.message, 'good'); loadPending();
+  }).catch(function(e){
+    b.disabled = false; b.textContent = 'Generate schedule';
+    toast(e.message, 'bad');
+  });
+});
+
+function loadPending(){
+  document.getElementById('pendBody').innerHTML =
+    '<div class="empty"><div class="spin"></div>Loading…</div>';
+
+  api('pending', {
+    doer: document.getElementById('fDoer').value,
+    type: document.getElementById('fType').value,
+    scope: document.getElementById('fScope').value,
+    q: document.getElementById('fQ').value
+  }).then(function(res){
+    if (!res.ok) throw new Error(res.message);
+    var d = res.data;
+    PEND = d;
+
+    document.getElementById('pendHead').textContent =
+      'OPEN TASKS — ' + d.shown + ' shown of ' + d.total + ' open';
+
+    if (!d.rows.length){
+      document.getElementById('pendBody').innerHTML =
+        '<div class="empty">Nothing matches these filters.</div>';
+      return;
+    }
+
+    var h = '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>PERSON</th><th>TASK</th><th>TYPE</th><th>DUE</th><th>REV</th><th></th>' +
+      '</tr></thead><tbody>';
+
+    d.rows.forEach(function(r){
+      h += '<tr>' +
+        '<td><div class="nm">' + esc(r.doer) + '</div><div class="sub">' + esc(r.taskId) + '</div></td>' +
+        '<td>' + esc(r.task) +
+          (r.lastReason ? '<div class="sub">Last reason: ' + esc(r.lastReason) + '</div>' : '') + '</td>' +
+        '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span></td>' +
+        '<td>' + esc(r.due) +
+          (r.late ? '<div><span class="pill late">' + r.late + 'd late</span></div>' : '') + '</td>' +
+        '<td>' + (r.revisions ? '<span class="pill rev">' + r.revisions + '</span>' : '0') + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn sm done" data-done="' + esc(r.key) + '">Done</button> ' +
+          (r.canRevise ? '<button class="btn sm rev" data-rev="' + esc(r.key) +
+             '" data-task="' + esc(r.task) + '">Move</button>' : '') +
+        '</td></tr>';
+    });
+
+    h += '</tbody></table></div>';
+    if (d.capped) h += '<div class="empty">Showing the first 300. Narrow the filters for the rest.</div>';
+    document.getElementById('pendBody').innerHTML = h;
+    wirePending();
+
+  }).catch(function(e){
+    document.getElementById('pendBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  });
+}
+
+function wirePending(){
+  document.querySelectorAll('[data-done]').forEach(function(b){
+    b.addEventListener('click', function(){
+      b.disabled = true; b.textContent = '…';
+      api('done', { key: b.dataset.done }).then(function(r){
+        toast(r.message, r.ok ? 'good' : 'bad');
+        if (r.ok) b.closest('tr').remove();
+        else { b.disabled = false; b.textContent = 'Done'; }
+      }).catch(function(e){
+        b.disabled = false; b.textContent = 'Done'; toast(e.message, 'bad');
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-rev]').forEach(function(b){
+    b.addEventListener('click', function(){
+      REVKEY = b.dataset.rev;
+      document.getElementById('revTask').textContent = b.dataset.task;
+      document.getElementById('revNote').value = '';
+      document.getElementById('revReason').selectedIndex = 0;
+      var d = new Date(); d.setDate(d.getDate() + 1);
+      document.getElementById('revDate').value = iso(d);
+      document.getElementById('revModal').classList.add('on');
+    });
+  });
+}
+
+document.getElementById('revCancel').addEventListener('click', function(){
+  document.getElementById('revModal').classList.remove('on');
+});
+
+document.getElementById('revSave').addEventListener('click', function(){
+  var b = this;
+  var date = document.getElementById('revDate').value;
+  if (!date){ toast('Pick the new date', 'bad'); return; }
+
+  b.disabled = true; b.textContent = 'Saving…';
+  api('revise', {
+    key: REVKEY,
+    reason: document.getElementById('revReason').value,
+    note: document.getElementById('revNote').value,
+    date: date
+  }).then(function(r){
+    b.disabled = false; b.textContent = 'Save';
+    document.getElementById('revModal').classList.remove('on');
+    toast(r.message, r.ok ? 'good' : 'bad');
+    loadPending();
+  }).catch(function(e){
+    b.disabled = false; b.textContent = 'Save'; toast(e.message, 'bad');
+  });
+});
+
+/* ---------- scores ---------- */
+document.getElementById('prevWk').addEventListener('click', function(){ WKOFF--; loadScores(); });
+document.getElementById('nextWk').addEventListener('click', function(){ if (WKOFF < 0){ WKOFF++; loadScores(); } });
+
+function loadScores(){
+  document.getElementById('scoreBody').innerHTML =
+    '<div class="empty"><div class="spin"></div>Loading…</div>';
+
+  api('scores', { week: WKOFF }).then(function(res){
+    if (!res.ok) throw new Error(res.message);
+    var s = res.data;
+
+    document.getElementById('wkLabel').textContent =
+      s.label + (s.offset === 0 ? '  (this week)' : '');
+    document.getElementById('nextWk').disabled = s.offset >= 0;
+
+    var t = s.totals;
+    document.getElementById('scoreKpis').innerHTML =
+      kpi('AVERAGE', t.avg + '/100', t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r') +
+      kpi('TASKS', t.tasks, '') +
+      kpi('COMPLETED', t.completed, 'g') +
+      kpi('REVISIONS', t.revisions, 'a') +
+      kpi('OVERDUE', t.overdue, t.overdue ? 'r' : '') +
+      kpi('LAPSED', t.lapsed, t.lapsed ? 'r' : '');
+
+    if (!s.scored.length && !s.idle.length){
+      document.getElementById('scoreBody').innerHTML =
+        '<div class="empty">Nobody has tasks in this week.</div>';
+      return;
+    }
+
+    var h = '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>PERSON</th><th>SCORE</th><th>TASKS</th><th>DONE</th>' +
+      '<th class="hide-sm">FIRST TIME</th><th>REV</th><th>OVERDUE</th>' +
+      '</tr></thead><tbody>';
+
+    s.scored.forEach(function(r,i){
+      var col = r.score >= 75 ? 'var(--green)' : r.score >= 50 ? 'var(--amber)' : 'var(--red)';
+      h += '<tr>' +
+        '<td><div class="nm">' + (i+1) + '. ' + esc(r.name) + '</div>' +
+          (r.dept ? '<div class="sub">' + esc(r.dept) + '</div>' : '') + '</td>' +
+        '<td><div class="bar"><i style="width:' + r.score + '%;background:' + col + ';opacity:.25"></i>' +
+          '<span style="color:' + col + '">' + r.score + '</span></div></td>' +
+        '<td>' + r.total + '</td><td>' + r.completed + '</td>' +
+        '<td class="hide-sm">' + (r.onTimePct === null ? '—' : r.onTimePct + '%') + '</td>' +
+        '<td>' + r.revisions + '</td>' +
+        '<td>' + (r.overdue ? '<span class="pill late">' + r.overdue + '</span>' : '0') + '</td>' +
+        '</tr>';
+    });
+
+    s.idle.forEach(function(r){
+      h += '<tr style="background:#fafbfd;color:var(--muted)">' +
+        '<td><div class="nm" style="color:var(--muted)">' + esc(r.name) + '</div></td>' +
+        '<td colspan="5" style="font-style:italic">No tasks this week — not scored</td>' +
+        '<td>' + (r.overdue ? '<span class="pill late">' + r.overdue + '</span>' : '0') + '</td>' +
+        '</tr>';
+    });
+
+    h += '</tbody></table></div>';
+    document.getElementById('scoreBody').innerHTML = h;
+
+  }).catch(function(e){
+    document.getElementById('scoreBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  });
+}
+
+/* ---------- reports ---------- */
+function initReport(){
+  if (RPT !== null) return;
+  quickRange('month');
+  loadReport();
+}
+
+document.querySelectorAll('[data-quick]').forEach(function(b){
+  b.addEventListener('click', function(){
+    quickRange(b.dataset.quick);
+    if (b.dataset.quick !== 'reset') loadReport();
+  });
+});
+document.getElementById('rGo').addEventListener('click', loadReport);
+['rDept','rDoer','rFreq','rStatus'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', loadReport);
+});
+var rTimer;
+document.getElementById('rQ').addEventListener('input', function(){
+  clearTimeout(rTimer); rTimer = setTimeout(loadReport, 450);
+});
+
+function quickRange(which){
+  var d = new Date(), from = new Date(), to = new Date();
+  if (which === 'today'){ }
+  else if (which === 'yesterday'){ from.setDate(d.getDate()-1); to = new Date(from); }
+  else if (which === 'week'){ from.setDate(d.getDate()-6); }
+  else if (which === 'month'){ from = new Date(d.getFullYear(), d.getMonth(), 1); }
+  else if (which === 'reset'){
+    ['rDept','rDoer','rFreq','rStatus','rQ'].forEach(function(id){
+      document.getElementById(id).value = '';
+    });
+    from = new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+  document.getElementById('rFrom').value = iso(from);
+  document.getElementById('rTo').value   = iso(to);
+}
+
+function reportParams(){
+  return {
+    from: document.getElementById('rFrom').value,
+    to: document.getElementById('rTo').value,
+    dept: document.getElementById('rDept').value,
+    doer: document.getElementById('rDoer').value,
+    freq: document.getElementById('rFreq').value,
+    status: document.getElementById('rStatus').value,
+    q: document.getElementById('rQ').value
+  };
+}
+
+function loadReport(){
+  document.getElementById('rBody').innerHTML =
+    '<div class="empty"><div class="spin"></div>Searching…</div>';
+
+  api('report', reportParams()).then(function(res){
+    if (!res.ok) throw new Error(res.message);
+    var d = res.data;
+    RPT = d;
+
+    if (d.message){
+      document.getElementById('rBody').innerHTML = '<div class="empty">' + esc(d.message) + '</div>';
+      document.getElementById('rKpis').innerHTML = '';
+      return;
+    }
+
+    var t = d.totals;
+    document.getElementById('rKpis').innerHTML =
+      kpi('TASKS', t.total, '') +
+      kpi('COMPLETED', t.completed, 'g') +
+      kpi('FIRST TIME', t.firstTimePct + '%', t.firstTimePct >= 75 ? 'g' : 'a') +
+      kpi('NOT DONE', t.missed + t.lapsed, (t.missed + t.lapsed) ? 'r' : '') +
+      kpi('STILL OPEN', t.open, t.overdue ? 'a' : '') +
+      kpi('REVISIONS', t.revisions, 'a') +
+      kpi('AVG SCORE', t.avg + '/100', t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r');
+
+    document.getElementById('rHead').textContent =
+      'RESULTS — ' + d.label + '  (' + d.all + ' task' + (d.all === 1 ? '' : 's') + ')';
+
+    if (!d.rows.length){
+      document.getElementById('rBody').innerHTML =
+        '<div class="empty">Nothing matches these filters.</div>';
+      return;
+    }
+
+    var h = '<div style="overflow-x:auto"><table><thead><tr>' +
+      '<th>PERSON</th><th>TASK</th><th>TYPE</th><th>DUE</th>' +
+      '<th class="hide-sm">ORIGINAL</th><th>REV</th><th class="hide-sm">REASON</th>' +
+      '<th>STATUS</th><th class="hide-sm">CLOSED</th><th>SCORE</th>' +
+      '</tr></thead><tbody>';
+
+    d.rows.forEach(function(r){
+      var st = r.status === 'Completed' ? 'ok' : r.status === 'Pending' ? 'open' : 'late';
+      h += '<tr>' +
+        '<td><div class="nm">' + esc(r.doer) + '</div>' +
+          (r.dept ? '<div class="sub">' + esc(r.dept) + '</div>' : '') + '</td>' +
+        '<td>' + esc(r.task) + '<div class="sub">' + esc(r.taskId) + '</div></td>' +
+        '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span>' +
+          (r.freq ? '<div class="sub">' + esc(r.freq) + '</div>' : '') + '</td>' +
+        '<td>' + esc(r.due) +
+          (r.late ? '<div><span class="pill late">' + r.late + 'd late</span></div>' : '') + '</td>' +
+        '<td class="hide-sm">' + esc(r.origDue) + '</td>' +
+        '<td>' + (r.revisions ? '<span class="pill rev">' + r.revisions + '</span>' : '0') + '</td>' +
+        '<td class="hide-sm" style="max-width:230px">' + esc(r.reasons) + '</td>' +
+        '<td><span class="pill ' + st + '">' + esc(r.status) + '</span></td>' +
+        '<td class="hide-sm">' + esc(r.doneOn) + '</td>' +
+        '<td>' + (r.score === '' ? '—' : '<b>' + r.score + '</b>') + '</td>' +
+        '</tr>';
+    });
+
+    h += '</tbody></table></div>';
+    if (d.capped){
+      h += '<div class="empty">Showing the first 500 of ' + d.all + '. Narrow the range for the rest.</div>';
+    }
+    document.getElementById('rBody').innerHTML = h;
+
+  }).catch(function(e){
+    document.getElementById('rBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+  });
+}
+
+document.getElementById('rCsv').addEventListener('click', function(){
+  if (!RPT || !RPT.rows || !RPT.rows.length){ toast('Nothing to export yet','bad'); return; }
+
+  var head = ['Task ID','Task','Person','Department','Type','Frequency',
+              'Original Due','Current Due','Revisions','Reasons','Status',
+              'Closed On','Score','Days Late'];
+  var lines = [head.map(csv).join(',')];
+  RPT.rows.forEach(function(r){
+    lines.push([r.taskId,r.task,r.doer,r.dept,r.type,r.freq,r.origDue,r.due,
+                r.revisions,r.reasons,r.status,r.doneOn,r.score,r.late].map(csv).join(','));
+  });
+
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'TVL-tasks-' + document.getElementById('rFrom').value +
+               '-to-' + document.getElementById('rTo').value + '.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 400);
+});
+
+document.getElementById('rPdf').addEventListener('click', function(){
+  if (!RPT || !RPT.rows || !RPT.rows.length){ toast('Nothing to export yet','bad'); return; }
+
+  var b = this;
+  b.disabled = true; b.textContent = 'Building…';
+  document.getElementById('rPdfLink').classList.add('hide');
+
+  api('reportpdf', reportParams()).then(function(r){
+    b.disabled = false; b.textContent = 'Export PDF';
+    if (!r.ok){ toast(r.message, 'bad'); return; }
+
+    var box = document.getElementById('rPdfLink');
+    box.innerHTML = 'PDF ready (' + r.count + ' task' + (r.count === 1 ? '' : 's') + ') — ' +
+      '<a href="' + esc(r.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">open ' +
+      esc(r.name) + '</a>';
+    box.classList.remove('hide');
+    toast('PDF saved to Drive', 'good');
+
+  }).catch(function(e){
+    b.disabled = false; b.textContent = 'Export PDF';
+    toast(e.message, 'bad');
+  });
+});
+
+function csv(v){
+  var s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+
+/* ---------- helpers ---------- */
+function iso(d){
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+function kpi(k,v,cls){
+  return '<div class="kpi ' + cls + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
+}
+function setMsg(id,txt,cls){
+  var e = document.getElementById(id); e.textContent = txt; e.className = 'msg ' + (cls||'');
+}
+function toast(msg,kind){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + (kind||'');
+  setTimeout(function(){ t.className = 'toast ' + (kind||''); }, 3200);
+}
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+/* ---------- installable ---------- */
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw-dash.js').catch(function(e){
+      console.warn('Service worker not registered:', e);
+    });
+  });
+}
+</script>
+</body>
+</html>
