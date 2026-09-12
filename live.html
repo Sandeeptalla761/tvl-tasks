@@ -9,12 +9,11 @@
 <!--
   TVL TASK SYSTEM — live.html
   =====================================================================
-  Read-only monitor. Live team view, open tasks, and weekly scores.
+  Read-only monitor. Live team view, open tasks (filterable by type),
+  completed tasks, and weekly scores.
 
-  Data fetch: cookieless fetch() first (credentials:'omit', so a
-  signed-in Google session on the phone can't interfere), falling back
-  to a JSONP script tag only if fetch isn't available or fails. This
-  is the same fix that made tasks.html reliable on mobile.
+  Data fetch: cookieless fetch() first (credentials:'omit'), falling
+  back to a JSONP script tag only if fetch is unavailable or fails.
 
   SETUP
     1. Set API_URL to your Apps Script /exec URL   (already filled in)
@@ -23,7 +22,7 @@
 
   The key is a shared secret. Anyone with the link can READ every task
   and score, so treat the URL like a password. Change DASH_KEY on the
-  Config tab to invalidate every copy that is out there.
+  Config tab to invalidate every old link at once.
 
   Nothing here can write. Marking tasks done and assigning work stay in
   the signed-in dashboard on purpose.
@@ -55,7 +54,7 @@
   .tabs{background:#fff;border-bottom:1px solid var(--line);display:flex;
         position:sticky;top:70px;z-index:19;overflow-x:auto;}
   .tabs button{border:0;background:none;font:inherit;font-size:13px;font-weight:700;
-        color:var(--muted);padding:13px 17px;cursor:pointer;
+        color:var(--muted);padding:13px 15px;cursor:pointer;
         border-bottom:3px solid transparent;white-space:nowrap;}
   .tabs button.on{color:var(--navy);border-bottom-color:var(--blue);}
 
@@ -97,10 +96,12 @@
   .chip.late{background:var(--red-bg);color:var(--red-tx);}
   .chip.due{background:#e8effe;color:#1d4ed8;}
   .chip.rev{background:var(--amber-bg);color:var(--amber-tx);}
+  .chip.ok{background:var(--green-bg);color:var(--green-tx);}
+  .chip.miss{background:var(--red-bg);color:var(--red-tx);}
   .tcard .why{font-size:11px;color:var(--muted);margin-top:7px;font-style:italic;}
 
   .filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
-  .filters select,.filters input{flex:1;min-width:130px;font:inherit;font-size:13px;
+  .filters select,.filters input{flex:1;min-width:110px;font:inherit;font-size:13px;
         padding:9px 11px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;}
 
   .wknav{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
@@ -150,6 +151,7 @@
 <div class="tabs">
   <button class="on" data-tab="team">Team</button>
   <button data-tab="tasks">Open Tasks</button>
+  <button data-tab="done">Completed</button>
   <button data-tab="scores">Scores</button>
 </div>
 
@@ -166,10 +168,39 @@
         <option value="today">Due today</option>
         <option value="overdue">Overdue only</option>
       </select>
+      <select id="fType">
+        <option value="">All types</option>
+        <option value="DAILY">Daily</option>
+        <option value="RECURRING">Recurring</option>
+        <option value="ONETIME">One-time</option>
+      </select>
       <select id="fDoer"><option value="">Everyone</option></select>
+    </div>
+    <div class="filters">
       <input type="text" id="fQ" placeholder="Search task or person…">
     </div>
     <div id="tasksBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
+  </div>
+
+  <div id="tab-done" style="display:none">
+    <div class="filters">
+      <select id="dScope">
+        <option value="7">Last 7 days</option>
+        <option value="1">Today</option>
+        <option value="30">Last 30 days</option>
+      </select>
+      <select id="dType">
+        <option value="">All types</option>
+        <option value="DAILY">Daily</option>
+        <option value="RECURRING">Recurring</option>
+        <option value="ONETIME">One-time</option>
+      </select>
+      <select id="dDoer"><option value="">Everyone</option></select>
+    </div>
+    <div class="filters">
+      <input type="text" id="dQ" placeholder="Search task or person…">
+    </div>
+    <div id="doneBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
   </div>
 
   <div id="tab-scores" style="display:none">
@@ -193,12 +224,7 @@ if (qp.get('k')) KEY = qp.get('k');
 
 var TAB = 'team', WK = 0, TIMER = null, seq = 0, DOERS = [];
 
-/* ---------- fetch first, JSONP fallback ----------
-   fetch() with credentials:'omit' avoids a signed-in Google session on
-   the phone interfering with the request. If fetch is unavailable or
-   fails outright (some mobile networks block the redirect a plain
-   plain script tag makes to googleusercontent.com), fall back to JSONP
-   with retries rather than give up. */
+/* ---------- fetch first, JSONP fallback ---------- */
 function api(params, cb, onErr){
   params.k = KEY;
   var q = Object.keys(params).map(function(k){
@@ -270,7 +296,7 @@ document.querySelectorAll('.tabs button').forEach(function(b){
     document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
     b.classList.add('on');
     TAB = b.dataset.tab;
-    ['team','tasks','scores'].forEach(function(t){
+    ['team','tasks','done','scores'].forEach(function(t){
       document.getElementById('tab-' + t).style.display = (t === TAB) ? '' : 'none';
     });
     refresh();
@@ -280,14 +306,13 @@ document.querySelectorAll('.tabs button').forEach(function(b){
 
 function resetTimer(){
   if (TIMER) clearInterval(TIMER);
-  /* Only the team view is worth polling; the other two are looked at
-     deliberately rather than watched. */
   TIMER = setInterval(function(){ if (TAB === 'team') loadTeam(); }, 60000);
 }
 
 function refresh(){
   if (TAB === 'team')   loadTeam();
   if (TAB === 'tasks')  loadTasks();
+  if (TAB === 'done')   loadDone();
   if (TAB === 'scores') loadScores();
 }
 
@@ -310,14 +335,14 @@ function loadTeam(){
 
     if (!d.people.length) return empty('teamBody', 'Nobody active on the Doer List.');
 
-    /* Fill the list of names for the task filter while we are here. */
     if (!DOERS.length){
       DOERS = d.people.map(function(p){ return p.name; });
-      document.getElementById('fDoer').innerHTML =
-        '<option value="">Everyone</option>' +
+      var opts = '<option value="">Everyone</option>' +
         DOERS.slice().sort().map(function(n){
           return '<option value="' + esc(n) + '">' + esc(n) + '</option>';
         }).join('');
+      document.getElementById('fDoer').innerHTML = opts;
+      document.getElementById('dDoer').innerHTML = opts;
     }
 
     document.getElementById('teamBody').innerHTML =
@@ -355,7 +380,7 @@ function personCard(p){
 }
 
 /* ---------- open tasks ---------- */
-['fScope','fDoer'].forEach(function(id){
+['fScope','fType','fDoer'].forEach(function(id){
   document.getElementById(id).addEventListener('change', loadTasks);
 });
 var qTimer;
@@ -368,6 +393,7 @@ function loadTasks(){
 
   api({ api:'pending',
         scope: document.getElementById('fScope').value,
+        type : document.getElementById('fType').value,
         doer : document.getElementById('fDoer').value,
         q    : document.getElementById('fQ').value },
     function(d){
@@ -392,6 +418,49 @@ function loadTasks(){
         }).join('');
     },
     function(why){ oops('tasksBody', null, why); });
+}
+
+/* ---------- completed ---------- */
+['dScope','dType','dDoer'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', loadDone);
+});
+var dqTimer;
+document.getElementById('dQ').addEventListener('input', function(){
+  clearTimeout(dqTimer); dqTimer = setTimeout(loadDone, 400);
+});
+
+function loadDone(){
+  document.getElementById('doneBody').innerHTML = '<div class="empty"><div class="spin"></div>Loading…</div>';
+
+  api({ api:'completed',
+        days : document.getElementById('dScope').value,
+        type : document.getElementById('dType').value,
+        doer : document.getElementById('dDoer').value,
+        q    : document.getElementById('dQ').value },
+    function(d){
+      if (!d || !d.ok) return oops('doneBody', d);
+      if (!d.rows.length) return empty('doneBody', 'Nothing closed in this window yet.');
+
+      document.getElementById('doneBody').innerHTML =
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' +
+          d.shown + ' shown of ' + d.total + ' closed</div>' +
+        d.rows.map(function(r){
+          var ok = r.status === 'Completed';
+          return '<div class="tcard">' +
+            '<div class="who">' + esc(r.doer) + '</div>' +
+            '<div class="t">' + esc(r.task) + '</div>' +
+            '<div class="meta">' +
+              '<span class="chip">' + esc(r.type) + '</span>' +
+              '<span class="chip ' + (ok ? 'ok' : 'miss') + '">' + esc(r.status) + '</span>' +
+              (r.score !== null ? '<span class="chip">Score ' + r.score + '</span>' : '') +
+              (r.revisions ? '<span class="chip rev">Revision ' + r.revisions + '</span>' : '') +
+              '<span class="chip">' + esc(r.completedOn) +
+                (r.completedAt ? ' \u00b7 ' + esc(r.completedAt) : '') + '</span>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+    },
+    function(why){ oops('doneBody', null, why); });
 }
 
 /* ---------- scores ---------- */
