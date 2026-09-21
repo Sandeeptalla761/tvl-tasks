@@ -98,6 +98,8 @@
   .btn.sm{font-size:12px;padding:7px 12px;}
   .btn.done{color:var(--green-tx);border-color:#bbf0cd;}
   .btn.rev{color:var(--amber-tx);border-color:#f0dfb0;}
+  .btn.danger{color:var(--red-tx);border-color:#f3bcbc;}
+  .btn.danger:hover{background:#fff5f5;}
 
   .hint{font-size:12px;color:var(--muted);margin:-6px 0 14px;}
   .msg{margin-top:12px;font-size:13px;font-weight:600;min-height:18px;}
@@ -352,6 +354,21 @@
   </div>
 </div>
 
+<!-- delete confirm dialog — shared by "delete this occurrence" and
+     "delete the whole task"; wording and the call on Confirm switch
+     based on which button opened it -->
+<div class="modal" id="delModal">
+  <div class="box">
+    <h3 id="delTitle">Delete this task</h3>
+    <div class="t" id="delTask"></div>
+    <div class="t" id="delWarn" style="color:var(--red-tx);font-weight:600;"></div>
+    <div class="row">
+      <button class="btn" id="delCancel">Cancel</button>
+      <button class="btn danger" id="delConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -360,6 +377,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbx9R5YC8AZfpvV4c1Lmk8Eq8a
 
 var PW    = '';
 var BOOT  = null, PEND = null, RPT = null, WKOFF = 0, TYPE = 'RECURRING', REVKEY = null;
+var DELMODE = null, DELKEY = null, DELTASKID = null;
 
 var HINTS = {
   DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Up to 3 revisions, each costing 25 points.',
@@ -633,7 +651,11 @@ function loadPending(){
         '<td style="white-space:nowrap">' +
           '<button class="btn sm done" data-done="' + esc(r.key) + '">Done</button> ' +
           (r.canRevise ? '<button class="btn sm rev" data-rev="' + esc(r.key) +
-             '" data-task="' + esc(r.task) + '">Move</button>' : '') +
+             '" data-task="' + esc(r.task) + '">Move</button> ' : '') +
+          '<button class="btn sm danger" data-delone="' + esc(r.key) +
+             '" data-task="' + esc(r.task) + '">Delete</button> ' +
+          '<button class="btn sm danger" data-deltask="' + esc(r.taskId) +
+             '" data-task="' + esc(r.task) + '">Delete Task</button>' +
         '</td></tr>';
     });
 
@@ -672,10 +694,61 @@ function wirePending(){
       document.getElementById('revModal').classList.add('on');
     });
   });
+
+  /* Delete ONE occurrence — asks first, via the shared delete modal. */
+  document.querySelectorAll('[data-delone]').forEach(function(b){
+    b.addEventListener('click', function(){
+      DELMODE = 'one';
+      DELKEY = b.dataset.delone;
+      document.getElementById('delTitle').textContent = 'Delete this task';
+      document.getElementById('delTask').textContent = b.dataset.task;
+      document.getElementById('delWarn').textContent =
+        'This removes only this one occurrence. It cannot be undone.';
+      document.getElementById('delModal').classList.add('on');
+    });
+  });
+
+  /* Delete the WHOLE task — asks first, via the same modal. */
+  document.querySelectorAll('[data-deltask]').forEach(function(b){
+    b.addEventListener('click', function(){
+      DELMODE = 'task';
+      DELTASKID = b.dataset.deltask;
+      document.getElementById('delTitle').textContent = 'Delete the whole task';
+      document.getElementById('delTask').textContent = b.dataset.task;
+      document.getElementById('delWarn').textContent =
+        'This stops it recurring and removes every open occurrence of it, not just this one. Completed history is kept. This cannot be undone.';
+      document.getElementById('delModal').classList.add('on');
+    });
+  });
 }
 
 document.getElementById('revCancel').addEventListener('click', function(){
   document.getElementById('revModal').classList.remove('on');
+});
+
+document.getElementById('delCancel').addEventListener('click', function(){
+  document.getElementById('delModal').classList.remove('on');
+  DELMODE = null; DELKEY = null; DELTASKID = null;
+});
+
+document.getElementById('delConfirm').addEventListener('click', function(){
+  var b = this;
+  b.disabled = true; b.textContent = 'Deleting…';
+
+  var call = DELMODE === 'one'  ? api('deleteone', { key: DELKEY })
+           : DELMODE === 'task' ? api('deletetask', { taskId: DELTASKID })
+           : Promise.resolve({ ok: false, message: 'Nothing selected.' });
+
+  call.then(function(r){
+    b.disabled = false; b.textContent = 'Delete';
+    document.getElementById('delModal').classList.remove('on');
+    toast(r.message, r.ok ? 'good' : 'bad');
+    if (r.ok) loadPending();
+  }).catch(function(e){
+    b.disabled = false; b.textContent = 'Delete';
+    document.getElementById('delModal').classList.remove('on');
+    toast(e.message, 'bad');
+  });
 });
 
 document.getElementById('revSave').addEventListener('click', function(){
