@@ -573,6 +573,7 @@ document.getElementById('addBtn').addEventListener('click', function(){
     if (!r.ok) return;
 
     document.getElementById('task').value = '';
+    document.getElementById('doer').value = '';
     PEND = null; RPT = null;
     toast(r.message, 'good');
 
