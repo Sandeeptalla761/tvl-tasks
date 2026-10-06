@@ -819,12 +819,12 @@ function loadScores(){
 
     var t = s.totals;
     document.getElementById('scoreKpis').innerHTML =
-      kpi('AVERAGE', t.avg + '/100', t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r') +
+      kpi('DAY AVERAGE', sShow(t.avgDay), t.avgDay >= 75 ? 'g' : t.avgDay >= 50 ? 'a' : 'r') +
+      kpi('WEEK AVERAGE', t.avg + '/100', t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r') +
+      kpi('OVERALL AVERAGE', sShow(t.avgOverall), t.avgOverall >= 75 ? 'g' : t.avgOverall >= 50 ? 'a' : 'r') +
       kpi('TASKS', t.tasks, '') +
       kpi('COMPLETED', t.completed, 'g') +
-      kpi('REVISIONS', t.revisions, 'a') +
-      kpi('OVERDUE', t.overdue, t.overdue ? 'r' : '') +
-      kpi('LAPSED', t.lapsed, t.lapsed ? 'r' : '');
+      kpi('OVERDUE', t.overdue, t.overdue ? 'r' : '');
 
     if (!s.scored.length && !s.idle.length){
       document.getElementById('scoreBody').innerHTML =
@@ -833,7 +833,8 @@ function loadScores(){
     }
 
     var h = '<div style="overflow-x:auto"><table><thead><tr>' +
-      '<th>PERSON</th><th>SCORE</th><th>TASKS</th><th>DONE</th>' +
+      '<th>PERSON</th><th>DAY<div style="font-weight:400;font-size:10px">' + esc(s.asOn) + '</div></th>' +
+      '<th>WEEK</th><th>OVERALL</th><th>TASKS</th><th>DONE</th>' +
       '<th class="hide-sm">FIRST TIME</th><th>REV</th><th>OVERDUE</th>' +
       '</tr></thead><tbody>';
 
@@ -842,8 +843,10 @@ function loadScores(){
       h += '<tr>' +
         '<td><div class="nm">' + (i+1) + '. ' + esc(r.name) + '</div>' +
           (r.dept ? '<div class="sub">' + esc(r.dept) + '</div>' : '') + '</td>' +
-        '<td><div class="bar"><i style="width:' + r.score + '%;background:' + col + ';opacity:.25"></i>' +
+        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b></td>' +
+        '<td title="' + esc(r.weekDetail) + '"><div class="bar"><i style="width:' + r.score + '%;background:' + col + ';opacity:.25"></i>' +
           '<span style="color:' + col + '">' + r.score + '</span></div></td>' +
+        '<td title="' + esc((r.overallDetail || '') + (r.since ? '  since ' + r.since : '')) + '"><b style="color:' + sCol(r.overallScore) + '">' + sShow(r.overallScore) + '</b></td>' +
         '<td>' + r.total + '</td><td>' + r.completed + '</td>' +
         '<td class="hide-sm">' + (r.onTimePct === null ? '—' : r.onTimePct + '%') + '</td>' +
         '<td>' + r.revisions + '</td>' +
@@ -854,12 +857,20 @@ function loadScores(){
     s.idle.forEach(function(r){
       h += '<tr style="background:#fafbfd;color:var(--muted)">' +
         '<td><div class="nm" style="color:var(--muted)">' + esc(r.name) + '</div></td>' +
-        '<td colspan="5" style="font-style:italic">No tasks this week — not scored</td>' +
+        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b></td>' +
+        '<td>\u2014</td>' +
+        '<td title="' + esc((r.overallDetail || '') + (r.since ? '  since ' + r.since : '')) + '"><b style="color:' + sCol(r.overallScore) + '">' + sShow(r.overallScore) + '</b></td>' +
+        '<td colspan="4" style="font-style:italic">No tasks this week — not scored for the week</td>' +
         '<td>' + (r.overdue ? '<span class="pill late">' + r.overdue + '</span>' : '0') + '</td>' +
         '</tr>';
     });
 
-    h += '</tbody></table></div>';
+    h += '</tbody></table></div>' +
+      '<div class="empty" style="padding:14px;font-size:12px;text-align:left">' +
+      'DAY is ' + esc(s.asOn) + ', WEEK is the week shown, OVERALL runs from each person\'s first task up to ' + esc(s.asOn) + '. ' +
+      'Today\'s unfinished work counts as 0 until it is done. Each date a task was due counts once: ' +
+      'done on the date = 100, not done = 0, and a revision adds a new date to score. ' +
+      'Daily 25% + Recurring 35% + One-time 40%.</div>';
     document.getElementById('scoreBody').innerHTML = h;
 
   }).catch(function(e){
@@ -1041,6 +1052,15 @@ function csv(v){
 function iso(d){
   return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
 }
+/* A score from the server as a number, or null. Anything else (a missing
+   value, NaN) is treated as "no score", never printed as the word undefined. */
+function sv(v){ return (typeof v === 'number' && isFinite(v)) ? v : null; }
+function sShow(v){ v = sv(v); return v === null ? '\u2014' : v; }
+function sCol(v){
+  v = sv(v);
+  return v === null ? 'var(--muted)' : v >= 75 ? 'var(--green)' : v >= 50 ? 'var(--amber)' : 'var(--red)';
+}
+
 function kpi(k,v,cls){
   return '<div class="kpi ' + cls + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
 }
