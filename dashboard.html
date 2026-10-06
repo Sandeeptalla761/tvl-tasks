@@ -381,9 +381,9 @@ var BOOT  = null, PEND = null, RPT = null, WKOFF = 0, TYPE = 'RECURRING', REVKEY
 var DELMODE = null, DELKEY = null, DELTASKID = null;
 
 var HINTS = {
-  DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Up to 3 revisions, each costing 25 points.',
-  RECURRING: 'Repeats on the pattern you choose. Reminded the working day before, then daily until it is closed. Up to 3 revisions.',
-  ONETIME  : 'Sent the moment you create it, then daily until it is closed. Up to 3 revisions.'
+  DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Not done by the end of its day it is marked Not Completed (0) and is not sent again. Up to 3 revisions: the old date scores 0 and the new date is scored too.',
+  RECURRING: 'Repeats on the pattern you choose. Reminded the working day before, then every day until it is done. A date missed scores 0 even if it is finished later. Up to 3 revisions: each new date is scored too.',
+  ONETIME  : 'Sent to the person the moment you create it, then every working day until it is done. A date missed scores 0 even if it is finished later. Up to 3 revisions: each new date is scored too.'
 };
 
 /* ---------- transport ----------
