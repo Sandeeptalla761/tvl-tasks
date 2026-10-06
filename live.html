@@ -143,6 +143,33 @@
     .plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:11px;}
     .plist .pcard{margin-bottom:0;}
   }
+
+  /* counts under a score, and the per-person task list */
+  .cn3{margin-top:9px;font-size:11px;line-height:1.7;color:var(--muted);}
+  .cn3 b{display:inline-block;width:58px;color:var(--navy);font-size:9.5px;letter-spacing:.4px;}
+  .cn3 .g{color:var(--green-tx);font-weight:800;} .cn3 .r{color:var(--red-tx);font-weight:800;}
+  .cn3 .m{color:var(--amber-tx);font-weight:800;}
+  .lbtn{margin-top:9px;font:inherit;font-size:12px;font-weight:800;padding:8px 13px;border-radius:10px;
+        border:1px solid var(--line);background:#fff;color:var(--navy);cursor:pointer;}
+  .ovl{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;z-index:60;
+       align-items:flex-end;justify-content:center;}
+  .ovl.on{display:flex;}
+  .ovl .sh{background:#f6f8fc;width:100%;max-width:600px;max-height:92vh;overflow:auto;
+           border-radius:18px 18px 0 0;padding:16px 14px 22px;}
+  .ovl .lt{font-size:17px;font-weight:800;color:var(--navy);}
+  .ovl .ls{font-size:12px;color:var(--muted);margin-top:2px;}
+  .ovl .lclose{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 13px;
+               font:inherit;font-size:12px;font-weight:800;color:var(--navy);cursor:pointer;}
+  .lseg{display:flex;gap:7px;flex-wrap:wrap;margin:11px 0 4px;}
+  .lseg button{font:inherit;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:9px;
+               border:1px solid #cbd5e1;background:#fff;color:#42506e;cursor:pointer;}
+  .lseg button.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .lsum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 6px;}
+  .lb{border:1px solid var(--line);border-radius:11px;padding:8px 9px;background:#fff;}
+  .lb small{display:block;font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--muted);}
+  .lb b{display:block;font-size:21px;font-weight:800;color:var(--navy);margin-top:2px;}
+  .lb.g b{color:var(--green-tx);} .lb.r b{color:var(--red-tx);} .lb.m b{color:var(--amber-tx);}
+  .lb em{display:block;font-style:normal;font-size:10px;color:var(--muted);margin-top:1px;}
 </style>
 </head>
 
@@ -220,6 +247,24 @@
       <button id="wkNext">Later &rarr;</button>
     </div>
     <div id="scoresBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
+  </div>
+</div>
+
+<div class="ovl" id="listModal">
+  <div class="sh">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div><div class="lt" id="lstTitle"></div><div class="ls" id="lstSub"></div></div>
+      <button class="lclose" id="lstClose">Close</button>
+    </div>
+    <div class="lseg" id="lstScope">
+      <button data-s="day">Day</button><button data-s="week">Week</button><button data-s="overall">Overall</button>
+    </div>
+    <div id="lstSum"></div>
+    <div class="lseg" id="lstFilter">
+      <button data-f="all">All</button><button data-f="done">Completed</button>
+      <button data-f="notdone">Not completed</button><button data-f="open">Open</button>
+    </div>
+    <div id="lstBody" style="margin-top:8px"></div>
   </div>
 </div>
 
@@ -359,7 +404,12 @@ function loadTeam(){
       '<div class="plist">' + d.people.map(personCard).join('') + '</div>' +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">' +
       'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
-      'Live: work due today that is not done yet counts as 0 until it is done.</div>';
+      'Live: work due today that is not done yet counts as 0 until it is done. ' +
+      '"Not done" means its date has passed; "open" is still due today or later.</div>';
+
+    document.querySelectorAll('#teamBody [data-list]').forEach(function(b){
+      b.addEventListener('click', function(){ openList(b.dataset.list, 'day', 0); });
+    });
 
   }, function(why){ oops('teamBody', null, why); });
 }
@@ -387,6 +437,12 @@ function personCard(p){
       '<div>OPEN<b>' + p.openNow + '</b></div>' +
       '<div class="r">LATE<b>' + p.overdue + '</b></div>' +
     '</div>' +
+    '<div class="cn3">' +
+      '<div><b>DAY</b>' + cnt(p.dayCounts) + '</div>' +
+      '<div><b>WEEK</b>' + cnt(p.weekCounts) + '</div>' +
+      '<div><b>OVERALL</b>' + cnt(p.overallCounts) + '</div>' +
+    '</div>' +
+    '<button class="lbtn" data-list="' + esc(p.name) + '">View task list</button>' +
     (foot.length ? '<div class="foot">' + foot.join('  \u00b7  ') + '</div>' : '') +
   '</div>';
 }
@@ -499,14 +555,18 @@ function loadScores(){
 
     h += d.scored.map(function(r, i){
       var col = r.score >= 75 ? 'var(--green-tx)' : r.score >= 50 ? 'var(--amber-tx)' : 'var(--red-tx)';
-      var sub = r.completed + '/' + r.total + ' done' +
+      var sub = '<b style="font-size:9.5px;color:var(--navy);letter-spacing:.4px">WEEK</b> ' + cnt(r.weekCounts) +
                 (r.revisions ? ' \u00b7 ' + r.revisions + ' rev' : '') +
                 (r.overdue ? ' \u00b7 ' + r.overdue + ' overdue' : '');
-      return '<div class="rank">' +
+      return '<div class="rank" data-list="' + esc(r.name) + '" style="cursor:pointer">' +
         '<div class="no">' + (i + 1) + '</div>' +
         '<div class="mid">' +
           '<div class="nm">' + esc(r.name) + '</div>' +
           '<div class="sub">' + sub + '</div>' +
+          '<div class="cn3" style="margin-top:5px">' +
+            '<div><b>DAY</b>' + cnt(r.dayCounts) + '</div>' +
+            '<div><b>OVERALL</b>' + cnt(r.overallCounts) + '</div>' +
+          '</div>' +
           '<div class="bar"><i style="width:' + r.score + '%;background:' + col + '"></i></div>' +
         '</div>' +
         '<div class="scs">' +
@@ -530,10 +590,109 @@ function loadScores(){
 
     document.getElementById('scoresBody').innerHTML = h;
 
+    document.querySelectorAll('#scoresBody .rank').forEach(function(el){
+      el.addEventListener('click', function(){ openList(el.dataset.list, 'week', WK); });
+    });
+
   }, function(why){ oops('scoresBody', null, why); });
 }
 
 /* ---------- helpers ---------- */
+/* ---------- a person's task list: Day / Week / Overall ---------- */
+var LST = { name: '', scope: 'day', filter: 'all', wk: 0 };
+
+/* "5 tasks · 3 done · 2 not done · 1 open" */
+function cnt(c){
+  if (!c) return '';
+  return c.total + (c.total === 1 ? ' task' : ' tasks') +
+    ' \u00b7 <span class="g">' + c.done + ' done</span>' +
+    ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
+    (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
+}
+
+function lbox(k, v, cls, sub, color){
+  return '<div class="lb ' + cls + '"><small>' + k + '</small>' +
+         '<b' + (color ? ' style="color:' + color + '"' : '') + '>' + v + '</b>' +
+         (sub ? '<em>' + sub + '</em>' : '') + '</div>';
+}
+
+function openList(name, scope, wk){
+  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.wk = wk || 0;
+  document.getElementById('listModal').classList.add('on');
+  loadList();
+}
+
+function closeList(){ document.getElementById('listModal').classList.remove('on'); }
+
+function loadList(){
+  document.querySelectorAll('#lstScope button').forEach(function(b){ b.classList.toggle('on', b.dataset.s === LST.scope); });
+  document.querySelectorAll('#lstFilter button').forEach(function(b){ b.classList.toggle('on', b.dataset.f === LST.filter); });
+  document.getElementById('lstTitle').textContent = LST.name;
+  document.getElementById('lstSub').textContent = 'Loading\u2026';
+  document.getElementById('lstSum').innerHTML = '';
+  document.getElementById('lstBody').innerHTML = '<div class="empty"><div class="spin"></div>Loading\u2026</div>';
+
+  var CHIP = { done: 'ok', late: 'rev', missed: 'miss', lapsed: 'miss', today: 'due', upcoming: 'due' };
+
+  var ok = function(d){
+    var c = d.counts;
+    document.getElementById('lstTitle').textContent = d.name;
+    document.getElementById('lstSub').textContent =
+      d.label + (d.scope === 'overall' && d.since ? '  \u00b7  first task ' + d.since : '');
+
+    document.getElementById('lstSum').innerHTML = '<div class="lsum">' +
+      lbox('TOTAL', c.total, '') +
+      lbox('COMPLETED', c.done, 'g', c.onTime + ' on time' + (c.late ? ', ' + c.late + ' late' : '')) +
+      lbox('NOT COMPLETED', c.notDone, c.notDone ? 'r' : '', 'date passed') +
+      lbox('OPEN', c.open, c.open ? 'm' : '', 'due today or later') +
+      lbox('SCORE', sShow(d.score), '', '', sCol(d.score)) +
+    '</div>';
+
+    if (!d.rows.length){
+      document.getElementById('lstBody').innerHTML = '<div class="empty">Nothing in this list.</div>';
+      return;
+    }
+
+    document.getElementById('lstBody').innerHTML = d.rows.map(function(r){
+      return '<div class="tcard">' +
+        '<div class="t">' + esc(r.task) + '</div>' +
+        '<div class="meta">' +
+          '<span class="chip ' + (CHIP[r.state] || '') + '">' + esc(r.text) + '</span>' +
+          '<span class="chip">' + esc(r.type) + '</span>' +
+          '<span class="chip">Due ' + esc(r.due) + '</span>' +
+          (r.revisions ? '<span class="chip rev">Revision ' + r.revisions + '</span>' : '') +
+          (r.doneOn ? '<span class="chip">Done ' + esc(r.doneOn) + '</span>' : '') +
+          (r.score !== null ? '<span class="chip">Score ' + r.score + '</span>' : '') +
+        '</div></div>';
+    }).join('') +
+    '<div style="font-size:11px;color:var(--muted);margin:8px 2px;line-height:1.5">' +
+      (d.matching > d.shown ? 'Showing the latest ' + d.shown + ' of ' + d.matching + '. ' : '') +
+      '"Completed late" means finished after its date, which scores 0 for that date. ' +
+      '"Open" is not counted as not done until its date has passed.</div>';
+  };
+
+  var fail = function(e){
+    document.getElementById('lstSub').textContent = '';
+    document.getElementById('lstBody').innerHTML =
+      '<div class="empty">' + esc(e && e.message ? e.message : 'Could not load the list.') + '</div>';
+  };
+
+  api({ api:'doertasks', name: LST.name, scope: LST.scope, w: LST.wk, filter: LST.filter },
+    function(d){ if (!d || !d.ok) return fail(d); ok(d); },
+    function(why){ fail({ message: String(why || 'Could not load the list.') }); });
+}
+
+document.getElementById('lstClose').addEventListener('click', closeList);
+document.getElementById('listModal').addEventListener('click', function(e){ if (e.target === this) closeList(); });
+document.getElementById('lstScope').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  LST.scope = b.dataset.s; loadList();
+});
+document.getElementById('lstFilter').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  LST.filter = b.dataset.f; loadList();
+});
+
 /* A score from the server as a number, or null. Anything else (a missing
    value, NaN) is treated as "no score", never printed as the word undefined. */
 function sv(v){ return (typeof v === 'number' && isFinite(v)) ? v : null; }
