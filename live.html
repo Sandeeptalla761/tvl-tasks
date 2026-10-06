@@ -405,7 +405,8 @@ function loadTeam(){
       '<div style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">' +
       'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
       'Live: work due today that is not done yet counts as 0 until it is done. ' +
-      '"Not done" means its date has passed; "open" is still due today or later.</div>';
+      '"Not done" means its date has passed; "open" is still due today or later. ' +
+      '"(late)" means finished after its date: counted as done, 0 for that date.</div>';
 
     document.querySelectorAll('#teamBody [data-list]').forEach(function(b){
       b.addEventListener('click', function(){ openList(b.dataset.list, 'day', 0); });
@@ -608,6 +609,7 @@ function cnt(c){
   if (!c) return '';
   return c.total + (c.total === 1 ? ' task' : ' tasks') +
     ' \u00b7 <span class="g">' + c.done + ' done</span>' +
+    (c.late ? ' <span class="m">(' + c.late + ' late)</span>' : '') +
     ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
     (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
 }
