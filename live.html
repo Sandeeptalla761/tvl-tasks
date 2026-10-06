@@ -406,7 +406,7 @@ function loadTeam(){
       'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
       'Live: work due today that is not done yet counts as 0 until it is done. ' +
       '"Not done" means its date has passed; "open" is still due today or later. ' +
-      '"(late)" means finished after its date: counted as done, 0 for that date.</div>';
+      'Completed = 100, not completed = 0; revisions do not reduce it.</div>';
 
     document.querySelectorAll('#teamBody [data-list]').forEach(function(b){
       b.addEventListener('click', function(){ openList(b.dataset.list, 'day', 0); });
@@ -421,8 +421,6 @@ function personCard(p){
   if (p.overdue)   foot.push('<b>' + p.overdue + ' overdue</b>' + (p.oldest ? ', oldest ' + p.oldest + 'd' : ''));
   if (p.upcoming)  foot.push(p.upcoming + ' coming up');
   if (p.lastAt)    foot.push('last closed ' + esc(p.lastAt));
-  if (p.doneLateToday)  foot.push('<b>' + p.doneLateToday + ' done late</b> (after their date, so 0 for that date)');
-  if (p.doneEarlyToday) foot.push(p.doneEarlyToday + ' done early (scored on their date)');
   if (p.weekTasks) foot.push('week ' + p.weekDone + '/' + p.weekTasks + (p.revisions ? ', ' + p.revisions + ' rev' : ''));
 
   return '<div class="pcard ' + cls + '">' +
@@ -609,7 +607,6 @@ function cnt(c){
   if (!c) return '';
   return c.total + (c.total === 1 ? ' task' : ' tasks') +
     ' \u00b7 <span class="g">' + c.done + ' done</span>' +
-    (c.late ? ' <span class="m">(' + c.late + ' late)</span>' : '') +
     ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
     (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
 }
@@ -646,9 +643,9 @@ function loadList(){
 
     document.getElementById('lstSum').innerHTML = '<div class="lsum">' +
       lbox('TOTAL', c.total, '') +
-      lbox('COMPLETED', c.done, 'g', c.onTime + ' on time' + (c.late ? ', ' + c.late + ' late' : '')) +
-      lbox('NOT COMPLETED', c.notDone, c.notDone ? 'r' : '', 'date passed') +
-      lbox('OPEN', c.open, c.open ? 'm' : '', 'due today or later') +
+      lbox('COMPLETED', c.done, 'g', 'each scores 100') +
+      lbox('NOT COMPLETED', c.notDone, c.notDone ? 'r' : '', 'date passed, scores 0') +
+      lbox('OPEN', c.open, c.open ? 'm' : '', 'not counted yet') +
       lbox('SCORE', sShow(d.score), '', '', sCol(d.score)) +
     '</div>';
 
@@ -671,8 +668,8 @@ function loadList(){
     }).join('') +
     '<div style="font-size:11px;color:var(--muted);margin:8px 2px;line-height:1.5">' +
       (d.matching > d.shown ? 'Showing the latest ' + d.shown + ' of ' + d.matching + '. ' : '') +
-      '"Completed late" means finished after its date, which scores 0 for that date. ' +
-      '"Open" is not counted as not done until its date has passed.</div>';
+      'A task scores 100 if it is completed and 0 if it is not. Revising it, or finishing it after its date, ' +
+      'does not reduce the score. "Open" is not counted until its date has passed.</div>';
   };
 
   var fail = function(e){
