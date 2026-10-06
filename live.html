@@ -77,6 +77,11 @@
   .pcard .sc{font-size:23px;font-weight:800;line-height:1;}
   .pcard .sc small{font-size:9px;font-weight:800;color:var(--muted);display:block;
         text-align:right;letter-spacing:.5px;margin-top:3px;}
+  .pcard .scs{display:flex;gap:11px;text-align:right;}
+  .pcard .scs .s b{display:block;font-size:21px;font-weight:800;line-height:1;}
+  .pcard .scs .s small{display:block;font-size:8.5px;font-weight:800;color:var(--muted);
+        letter-spacing:.4px;margin-top:3px;}
+  .pcard .scs .s.dim b{font-size:17px;}
   .pcard .nums{display:flex;gap:15px;margin-top:10px;flex-wrap:wrap;}
   .pcard .nums div{font-size:9.5px;color:var(--muted);font-weight:800;letter-spacing:.4px;}
   .pcard .nums b{display:block;font-size:17px;color:var(--ink);font-weight:800;
@@ -119,6 +124,11 @@
   .rank .bar{height:6px;border-radius:4px;background:#eef1f8;margin-top:7px;overflow:hidden;}
   .rank .bar i{display:block;height:100%;border-radius:4px;}
   .rank .sc{font-size:21px;font-weight:800;min-width:46px;text-align:right;}
+  .rank .scs{display:flex;gap:10px;text-align:right;}
+  .rank .scs .s b{display:block;font-size:19px;font-weight:800;line-height:1;}
+  .rank .scs .s small{display:block;font-size:8.5px;font-weight:800;color:var(--muted);
+        letter-spacing:.4px;margin-top:3px;}
+  .rank .scs .s.dim b{font-size:15px;}
 
   .empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;}
   .empty .big{font-size:40px;margin-bottom:10px;}
@@ -346,17 +356,16 @@ function loadTeam(){
     }
 
     document.getElementById('teamBody').innerHTML =
-      '<div class="plist">' + d.people.map(personCard).join('') + '</div>';
+      '<div class="plist">' + d.people.map(personCard).join('') + '</div>' +
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">' +
+      'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
+      'Live: work due today that is not done yet counts as 0 until it is done.</div>';
 
   }, function(why){ oops('teamBody', null, why); });
 }
 
 function personCard(p){
   var cls = p.overdue ? 'bad' : (p.openNow ? 'warn' : 'ok');
-  var col = p.score === null ? 'var(--muted)'
-          : p.score >= 75 ? 'var(--green-tx)'
-          : p.score >= 50 ? 'var(--amber-tx)' : 'var(--red-tx)';
-
   var foot = [];
   if (p.overdue)   foot.push('<b>' + p.overdue + ' overdue</b>' + (p.oldest ? ', oldest ' + p.oldest + 'd' : ''));
   if (p.upcoming)  foot.push(p.upcoming + ' coming up');
@@ -367,8 +376,11 @@ function personCard(p){
     '<div class="top"><div>' +
       '<div class="nm">' + esc(p.name) + '</div>' +
       (p.dept ? '<div class="dp">' + esc(p.dept) + '</div>' : '') +
-    '</div><div class="sc" style="color:' + col + '">' +
-      (p.score === null ? '\u2014' : p.score) + '<small>WEEK</small></div></div>' +
+    '</div><div class="scs">' +
+      chip('DAY',     p.dayScore,     p.dayDetail,     true) +
+      chip('WEEK',    p.weekScore,    p.weekDetail,    false) +
+      chip('OVERALL', p.overallScore, (p.overallDetail || '') + (p.since ? '  since ' + p.since : ''), true) +
+    '</div></div>' +
     '<div class="nums">' +
       '<div>TODAY<b>' + p.dueToday + '</b></div>' +
       '<div class="g">DONE<b>' + p.doneToday + '</b></div>' +
@@ -478,9 +490,9 @@ function loadScores(){
 
     var t = d.totals;
     var h = '<div class="kpis" style="grid-template-columns:repeat(3,1fr)">' +
-      kpi('AVERAGE', t.avg, t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r') +
-      kpi('TASKS', t.tasks, '') +
-      kpi('COMPLETED', t.completed, 'g') +
+      kpi('DAY AVG', sShow(t.avgDay), t.avgDay >= 75 ? 'g' : t.avgDay >= 50 ? 'a' : 'r') +
+      kpi('WEEK AVG', t.avg, t.avg >= 75 ? 'g' : t.avg >= 50 ? 'a' : 'r') +
+      kpi('OVERALL AVG', sShow(t.avgOverall), t.avgOverall >= 75 ? 'g' : t.avgOverall >= 50 ? 'a' : 'r') +
     '</div>';
 
     if (!d.scored.length && !d.idle.length) return empty('scoresBody', 'Nobody has tasks in this week.');
@@ -497,15 +509,24 @@ function loadScores(){
           '<div class="sub">' + sub + '</div>' +
           '<div class="bar"><i style="width:' + r.score + '%;background:' + col + '"></i></div>' +
         '</div>' +
-        '<div class="sc" style="color:' + col + '">' + r.score + '</div>' +
+        '<div class="scs">' +
+          chip('DAY',     r.dayScore,     r.dayDetail,     true) +
+          chip('WEEK',    r.score,        r.weekDetail,    false) +
+          chip('OVERALL', r.overallScore, (r.overallDetail || '') + (r.since ? '  since ' + r.since : ''), true) +
+        '</div>' +
       '</div>';
     }).join('');
 
     if (d.idle.length){
       h += '<div style="font-size:11.5px;color:var(--muted);margin-top:14px;font-style:italic">' +
-'No tasks dated in this week: ' + d.idle.map(function(r){ return esc(r.name); }).join(', ') +
-           '</div>';
+'No tasks dated in this week: ' + d.idle.map(function(r){
+        return esc(r.name) + ' (day ' + sShow(r.dayScore) + ', overall ' + sShow(r.overallScore) + ')';
+      }).join(', ') + '</div>';
     }
+
+    h += '<div style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">' +
+         'DAY is ' + esc(d.asOn) + ', WEEK is the week shown, OVERALL runs from each person\'s first task ' +
+         'up to ' + esc(d.asOn) + '. Today\'s unfinished work counts as 0 until it is done.</div>';
 
     document.getElementById('scoresBody').innerHTML = h;
 
@@ -513,6 +534,19 @@ function loadScores(){
 }
 
 /* ---------- helpers ---------- */
+/* A score from the server as a number, or null. Anything else (a missing
+   value, NaN) is treated as "no score", never printed as the word undefined. */
+function sv(v){ return (typeof v === 'number' && isFinite(v)) ? v : null; }
+function sShow(v){ v = sv(v); return v === null ? '\u2014' : v; }
+function sCol(v){
+  v = sv(v);
+  return v === null ? 'var(--muted)' : v >= 75 ? 'var(--green-tx)' : v >= 50 ? 'var(--amber-tx)' : 'var(--red-tx)';
+}
+function chip(label, v, tip, dim){
+  return '<div class="s' + (dim ? ' dim' : '') + '" title="' + esc(tip || '') + '">' +
+         '<b style="color:' + sCol(v) + '">' + sShow(v) + '</b><small>' + label + '</small></div>';
+}
+
 function kpi(k, v, cls){
   return '<div class="kpi ' + cls + '"><div class="k">' + k + '</div><div class="v">' + v + '</div></div>';
 }
