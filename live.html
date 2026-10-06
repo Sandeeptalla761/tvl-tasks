@@ -420,6 +420,8 @@ function personCard(p){
   if (p.overdue)   foot.push('<b>' + p.overdue + ' overdue</b>' + (p.oldest ? ', oldest ' + p.oldest + 'd' : ''));
   if (p.upcoming)  foot.push(p.upcoming + ' coming up');
   if (p.lastAt)    foot.push('last closed ' + esc(p.lastAt));
+  if (p.doneLateToday)  foot.push('<b>' + p.doneLateToday + ' done late</b> (after their date, so 0 for that date)');
+  if (p.doneEarlyToday) foot.push(p.doneEarlyToday + ' done early (scored on their date)');
   if (p.weekTasks) foot.push('week ' + p.weekDone + '/' + p.weekTasks + (p.revisions ? ', ' + p.revisions + ' rev' : ''));
 
   return '<div class="pcard ' + cls + '">' +
