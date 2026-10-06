@@ -1108,6 +1108,7 @@ function cnt(c){
   if (!c) return '';
   return c.total + (c.total === 1 ? ' task' : ' tasks') +
     ' \u00b7 <span class="g">' + c.done + ' done</span>' +
+    (c.late ? ' <span class="m">(' + c.late + ' late)</span>' : '') +
     ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
     (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
 }
