@@ -439,7 +439,7 @@ function personCard(p){
       '<div class="r">LATE<b>' + p.overdue + '</b></div>' +
     '</div>' +
     '<div class="cn3">' +
-      '<div><b>DAY</b>' + cnt(p.dayCounts) + '</div>' +
+      '<div><b>DAY</b>' + cnt(p.dayCounts, true) + '</div>' +
       '<div><b>WEEK</b>' + cnt(p.weekCounts) + '</div>' +
       '<div><b>OVERALL</b>' + cnt(p.overallCounts) + '</div>' +
     '</div>' +
@@ -565,7 +565,7 @@ function loadScores(){
           '<div class="nm">' + esc(r.name) + '</div>' +
           '<div class="sub">' + sub + '</div>' +
           '<div class="cn3" style="margin-top:5px">' +
-            '<div><b>DAY</b>' + cnt(r.dayCounts) + '</div>' +
+            '<div><b>DAY</b>' + cnt(r.dayCounts, true) + '</div>' +
             '<div><b>OVERALL</b>' + cnt(r.overallCounts) + '</div>' +
           '</div>' +
           '<div class="bar"><i style="width:' + r.score + '%;background:' + col + '"></i></div>' +
@@ -603,12 +603,15 @@ function loadScores(){
 var LST = { name: '', scope: 'day', filter: 'all', wk: 0 };
 
 /* "5 tasks · 3 done · 2 not done · 1 open" */
-function cnt(c){
+function cnt(c, showOpen){
   if (!c) return '';
-  return c.total + (c.total === 1 ? ' task' : ' tasks') +
+  /* Day shows today's open work. Week and Overall count only tasks whose date
+     has passed (completed + not completed), so they add up and no future task shows. */
+  var n = showOpen ? c.total : (c.done + c.notDone);
+  return n + (n === 1 ? ' task' : ' tasks') +
     ' \u00b7 <span class="g">' + c.done + ' done</span>' +
     ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
-    (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
+    (showOpen && c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
 }
 
 function lbox(k, v, cls, sub, color){
