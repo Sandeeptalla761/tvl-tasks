@@ -885,7 +885,7 @@ function loadScores(){
       h += '<tr>' +
         '<td><div class="nm">' + (i+1) + '. ' + esc(r.name) + '</div>' +
           (r.dept ? '<div class="sub">' + esc(r.dept) + '</div>' : '') + '</td>' +
-        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b><div class="cnl">' + cnt(r.dayCounts) + '</div></td>' +
+        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b><div class="cnl">' + cnt(r.dayCounts, true) + '</div></td>' +
         '<td title="' + esc(r.weekDetail) + '"><div class="bar"><i style="width:' + r.score + '%;background:' + col + ';opacity:.25"></i>' +
           '<span style="color:' + col + '">' + r.score + '</span></div><div class="cnl">' + cnt(r.weekCounts) + '</div></td>' +
         '<td title="' + esc((r.overallDetail || '') + (r.since ? '  since ' + r.since : '')) + '"><b style="color:' + sCol(r.overallScore) + '">' + sShow(r.overallScore) + '</b><div class="cnl">' + cnt(r.overallCounts) + '</div></td>' +
@@ -900,7 +900,7 @@ function loadScores(){
     s.idle.forEach(function(r){
       h += '<tr style="background:#fafbfd;color:var(--muted)">' +
         '<td><div class="nm" style="color:var(--muted)">' + esc(r.name) + '</div></td>' +
-        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b><div class="cnl">' + cnt(r.dayCounts) + '</div></td>' +
+        '<td title="' + esc(r.dayDetail) + '"><b style="color:' + sCol(r.dayScore) + '">' + sShow(r.dayScore) + '</b><div class="cnl">' + cnt(r.dayCounts, true) + '</div></td>' +
         '<td>\u2014</td>' +
         '<td title="' + esc((r.overallDetail || '') + (r.since ? '  since ' + r.since : '')) + '"><b style="color:' + sCol(r.overallScore) + '">' + sShow(r.overallScore) + '</b><div class="cnl">' + cnt(r.overallCounts) + '</div></td>' +
         '<td colspan="4" style="font-style:italic">No tasks this week — not scored for the week</td>' +
@@ -1104,12 +1104,15 @@ function iso(d){
 var LST = { name: '', scope: 'day', filter: 'all', wk: 0 };
 
 /* "5 tasks · 3 done · 2 not done · 1 open" */
-function cnt(c){
+function cnt(c, showOpen){
   if (!c) return '';
-  return c.total + (c.total === 1 ? ' task' : ' tasks') +
+  /* Day shows today's open work. Week and Overall count only tasks whose date
+     has passed (completed + not completed), so they add up and no future task shows. */
+  var n = showOpen ? c.total : (c.done + c.notDone);
+  return n + (n === 1 ? ' task' : ' tasks') +
     ' \u00b7 <span class="g">' + c.done + ' done</span>' +
     ' \u00b7 <span class="r">' + c.notDone + ' not done</span>' +
-    (c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
+    (showOpen && c.open ? ' \u00b7 <span class="m">' + c.open + ' open</span>' : '');
 }
 
 function lbox(k, v, cls, sub, color){
