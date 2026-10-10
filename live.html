@@ -284,6 +284,10 @@
       <button data-t="all">All types</button><button data-t="DAILY">Daily</button>
       <button data-t="RECURRING">Recurring</button><button data-t="ONETIME">One-time</button>
     </div>
+    <div class="lseg" id="lstRev">
+      <button data-r="all">All revisions</button><button data-r="0">No revision</button>
+      <button data-r="1">1 revision</button><button data-r="2">2 revisions</button><button data-r="3">3 revisions</button>
+    </div>
     <div id="lstBody" style="margin-top:8px"></div>
   </div>
 </div>
@@ -618,7 +622,7 @@ function loadScores(){
 
 /* ---------- helpers ---------- */
 /* ---------- a person's task list: Day / Week / Overall ---------- */
-var LST = { name: '', scope: 'day', filter: 'all', type: 'all', wk: 0 };
+var LST = { name: '', scope: 'day', filter: 'all', type: 'all', rev: 'all', wk: 0 };
 
 /* "5 tasks · 3 done · 2 not done · 1 open" */
 function cnt(c, showOpen){
@@ -639,7 +643,7 @@ function lbox(k, v, cls, sub, color){
 }
 
 function openList(name, scope, wk){
-  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.type = 'all'; LST.wk = wk || 0;
+  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.type = 'all'; LST.rev = 'all'; LST.wk = wk || 0;
   document.getElementById('listModal').classList.add('on');
   loadList();
 }
@@ -650,6 +654,7 @@ function loadList(){
   document.querySelectorAll('#lstScope button').forEach(function(b){ b.classList.toggle('on', b.dataset.s === LST.scope); });
   document.querySelectorAll('#lstFilter button').forEach(function(b){ b.classList.toggle('on', b.dataset.f === LST.filter); });
   document.querySelectorAll('#lstType button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === LST.type); });
+  document.querySelectorAll('#lstRev button').forEach(function(b){ b.classList.toggle('on', b.dataset.r === LST.rev); });
   document.getElementById('lstTitle').textContent = LST.name;
   document.getElementById('lstSub').textContent = 'Loading\u2026';
   document.getElementById('lstSum').innerHTML = '';
@@ -700,7 +705,7 @@ function loadList(){
       '<div class="empty">' + esc(e && e.message ? e.message : 'Could not load the list.') + '</div>';
   };
 
-  api({ api:'doertasks', name: LST.name, scope: LST.scope, w: LST.wk, filter: LST.filter, type: LST.type },
+  api({ api:'doertasks', name: LST.name, scope: LST.scope, w: LST.wk, filter: LST.filter, type: LST.type, rev: LST.rev },
     function(d){ if (!d || !d.ok) return fail(d); ok(d); },
     function(why){ fail({ message: String(why || 'Could not load the list.') }); });
 }
@@ -710,6 +715,10 @@ document.getElementById('listModal').addEventListener('click', function(e){ if (
 document.getElementById('lstScope').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   LST.scope = b.dataset.s; loadList();
+});
+document.getElementById('lstRev').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  LST.rev = b.dataset.r; loadList();
 });
 document.getElementById('lstType').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
