@@ -149,6 +149,22 @@
   .cn3 b{display:inline-block;width:58px;color:var(--navy);font-size:9.5px;letter-spacing:.4px;}
   .cn3 .g{color:var(--green-tx);font-weight:800;} .cn3 .r{color:var(--red-tx);font-weight:800;}
   .cn3 .m{color:var(--amber-tx);font-weight:800;}
+  /* score card breakdown on each person's card */
+  .scb{margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:11px;}
+  .scb table{width:100%;border-collapse:collapse;}
+  .scb th{font-size:8.5px;letter-spacing:.4px;color:var(--muted);font-weight:700;text-align:center;padding:5px 3px;background:#f8fafc;}
+  .scb th:first-child,.scb td:first-child{text-align:left;padding-left:8px;}
+  .scb td{text-align:center;padding:4px 3px;border-top:1px solid var(--line);font-weight:700;}
+  .scb td:first-child{font-size:9.5px;letter-spacing:.4px;color:var(--navy);}
+  .scb td.t{font-size:13px;font-weight:800;border-left:1px solid var(--line);}
+  .scb .frm{padding:6px 8px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.6;color:var(--muted);font-weight:600;}
+  .scb .frm b{color:var(--navy);}
+  .scb .lst{padding:6px 8px;border-top:1px solid var(--line);font-size:10.5px;line-height:1.5;color:var(--muted);}
+  .scb .lst h6{margin:0 0 3px;font-size:9px;letter-spacing:.5px;color:var(--navy);font-weight:800;}
+  .scb .lst div{display:flex;justify-content:space-between;gap:8px;}
+  .scb .lst span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .scb .lst b{white-space:nowrap;}
+
   .lbtn{margin-top:9px;font:inherit;font-size:12px;font-weight:800;padding:8px 13px;border-radius:10px;
         border:1px solid var(--line);background:#fff;color:var(--navy);cursor:pointer;}
   .ovl{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;z-index:60;
@@ -438,6 +454,7 @@ function personCard(p){
       '<div>OPEN<b>' + p.openNow + '</b></div>' +
       '<div class="r">LATE<b>' + p.overdue + '</b></div>' +
     '</div>' +
+    scBlock(p) +
     '<div class="cn3">' +
       '<div><b>DAY</b>' + cnt(p.dayCounts, true) + '</div>' +
       '<div><b>WEEK</b>' + cnt(p.weekCounts) + '</div>' +
@@ -705,6 +722,47 @@ function sCol(v){
   v = sv(v);
   return v === null ? 'var(--muted)' : v >= 75 ? 'var(--green-tx)' : v >= 50 ? 'var(--amber-tx)' : 'var(--red-tx)';
 }
+
+/* ---------- score breakdown, in the memo's format ---------- */
+function scNum(v){ return (v === null || v === undefined) ? '\u2014' : v; }
+function scRow(label, P, total){
+  var d = P || {};
+  function c(x){ return x ? '<td style="color:' + sCol(x.score) + '">' + x.score + '</td>' : '<td>\u2014</td>'; }
+  return '<tr><td>' + label + '</td>' + c(d.daily) + c(d.recurring) + c(d.onetime) +
+         '<td class="t" style="color:' + sCol(total) + '">' + sShow(total) + '</td></tr>';
+}
+function scFormula(label, P){
+  if (!P) return '';
+  var parts = [];
+  if (P.daily)     parts.push(P.daily.part);
+  if (P.recurring) parts.push(P.recurring.part);
+  if (P.onetime)   parts.push(P.onetime.part);
+  return '<div><b>' + label + '</b>  ' + parts.join(' + ') + ' = <b>' + P.total + '</b></div>';
+}
+function scBlock(p){
+  if (!p.dayParts && !p.weekParts && !p.overallParts) return '';
+  var h = '<div class="scb"><table><tr><th></th><th>DAILY</th><th>RECURRING</th><th>ONE-TIME</th><th>SCORE</th></tr>' +
+    scRow('TODAY',   p.dayParts,     p.dayScore) +
+    scRow('WEEK',    p.weekParts,    p.weekScore) +
+    scRow('OVERALL', p.overallParts, p.overallScore) +
+    '</table>';
+  h += '<div class="frm">' + scFormula('TODAY', p.dayParts) + scFormula('OVERALL', p.overallParts) +
+       '<div style="font-size:9.5px;font-weight:500">weights re-balanced over the task types this person has</div></div>';
+  if (p.fell && p.fell.length){
+    h += '<div class="lst"><h6>TASKS THAT COST SCORE</h6>' + p.fell.map(function(x){
+      return '<div title="' + esc(x.task + ' \u00b7 due ' + x.due) + '"><span>' + esc(x.task) + ' <i>(' + esc(x.why) + ')</i></span>' +
+             '<b style="color:' + sCol(x.score) + '">' + x.score + '</b></div>';
+    }).join('') + '</div>';
+  }
+  if (p.pend && p.pend.length){
+    h += '<div class="lst"><h6>PENDING, RUNNING OVERDUE</h6>' + p.pend.map(function(x){
+      return '<div title="' + esc(x.task) + '"><span>' + esc(x.task) + ' <i>(due ' + esc(x.due) + ', ' + x.late + 'd)</i></span>' +
+             '<b style="color:' + sCol(x.now) + '">now ' + x.now + '</b></div>';
+    }).join('') + '</div>';
+  }
+  return h + '</div>';
+}
+
 function chip(label, v, tip, dim){
   return '<div class="s' + (dim ? ' dim' : '') + '" title="' + esc(tip || '') + '">' +
          '<b style="color:' + sCol(v) + '">' + sShow(v) + '</b><small>' + label + '</small></div>';
