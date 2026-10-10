@@ -412,6 +412,10 @@
       <button data-t="all">All types</button><button data-t="DAILY">Daily</button>
       <button data-t="RECURRING">Recurring</button><button data-t="ONETIME">One-time</button>
     </div>
+    <div class="seg sm" style="margin:0 0 10px" id="lstRev">
+      <button data-r="all">All revisions</button><button data-r="0">No revision</button>
+      <button data-r="1">1 revision</button><button data-r="2">2 revisions</button><button data-r="3">3 revisions</button>
+    </div>
     <div id="lstBody"></div>
   </div>
 </div>
@@ -441,7 +445,7 @@
 
 <div class="modal" id="pinModal">
   <div class="box">
-    <h3>\ud83d\udd12 Admin PIN</h3>
+    <h3>&#128274; Admin PIN</h3>
     <div class="t">Editing a task or its score needs the admin PIN.</div>
     <div class="fld"><input type="password" id="pinIn" autocomplete="off" inputmode="numeric" placeholder="Enter PIN"></div>
     <div class="t" id="pinMsg" style="color:var(--red-tx);font-weight:600;min-height:16px;margin-bottom:8px"></div>
@@ -1226,7 +1230,7 @@ document.getElementById('edSave').addEventListener('click', function(){
   api('edittask', f).then(afterEdit).catch(function(e){ afterEdit({ ok:false, message: e.message }); });
 });
 
-var LST = { name: '', scope: 'day', filter: 'all', type: 'all', wk: 0 };
+var LST = { name: '', scope: 'day', filter: 'all', type: 'all', rev: 'all', wk: 0 };
 
 /* "5 tasks · 3 done · 2 not done · 1 open" */
 function cnt(c, showOpen){
@@ -1247,7 +1251,7 @@ function lbox(k, v, cls, sub, color){
 }
 
 function openList(name, scope, wk){
-  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.type = 'all'; LST.wk = wk || 0;
+  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.type = 'all'; LST.rev = 'all'; LST.wk = wk || 0;
   document.getElementById('listModal').classList.add('on');
   loadList();
 }
@@ -1258,6 +1262,7 @@ function loadList(){
   document.querySelectorAll('#lstScope button').forEach(function(b){ b.classList.toggle('on', b.dataset.s === LST.scope); });
   document.querySelectorAll('#lstFilter button').forEach(function(b){ b.classList.toggle('on', b.dataset.f === LST.filter); });
   document.querySelectorAll('#lstType button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === LST.type); });
+  document.querySelectorAll('#lstRev button').forEach(function(b){ b.classList.toggle('on', b.dataset.r === LST.rev); });
   document.getElementById('lstTitle').textContent = LST.name;
   document.getElementById('lstSub').textContent = 'Loading\u2026';
   document.getElementById('lstSum').innerHTML = '';
@@ -1314,7 +1319,7 @@ function loadList(){
       '<div class="empty">' + esc(e && e.message ? e.message : 'Could not load the list.') + '</div>';
   };
 
-  api('doertasks', { name: LST.name, scope: LST.scope, week: LST.wk, filter: LST.filter, type: LST.type })
+  api('doertasks', { name: LST.name, scope: LST.scope, week: LST.wk, filter: LST.filter, type: LST.type, rev: LST.rev })
     .then(function(res){ if (!res.ok) throw new Error(res.message); ok(res.data); })
     .catch(fail);
 }
@@ -1324,6 +1329,10 @@ document.getElementById('listModal').addEventListener('click', function(e){ if (
 document.getElementById('lstScope').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   LST.scope = b.dataset.s; loadList();
+});
+document.getElementById('lstRev').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  LST.rev = b.dataset.r; loadList();
 });
 document.getElementById('lstType').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
