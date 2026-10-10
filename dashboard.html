@@ -439,6 +439,19 @@
   </div>
 </div>
 
+<div class="modal" id="pinModal">
+  <div class="box">
+    <h3>\ud83d\udd12 Admin PIN</h3>
+    <div class="t">Editing a task or its score needs the admin PIN.</div>
+    <div class="fld"><input type="password" id="pinIn" autocomplete="off" inputmode="numeric" placeholder="Enter PIN"></div>
+    <div class="t" id="pinMsg" style="color:var(--red-tx);font-weight:600;min-height:16px;margin-bottom:8px"></div>
+    <div class="row">
+      <button class="btn" id="pinCancel">Cancel</button>
+      <button class="btn primary" id="pinGo">Unlock</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="toast" id="toast"></div>
 
@@ -1126,6 +1139,42 @@ function iso(d){
 }
 /* ---------- a person's task list: Day / Week / Overall ---------- */
 
+
+/* ---------- the PIN that unlocks editing ---------- */
+var EDT_PIN = '', PIN_ROW = null;
+
+function askEdit(r){
+  if (EDT_PIN) return openEdit(r);
+  PIN_ROW = r;
+  document.getElementById('pinIn').value = '';
+  document.getElementById('pinMsg').textContent = '';
+  document.getElementById('pinModal').classList.add('on');
+  setTimeout(function(){ document.getElementById('pinIn').focus(); }, 50);
+}
+document.getElementById('pinCancel').addEventListener('click', function(){
+  document.getElementById('pinModal').classList.remove('on');
+});
+document.getElementById('pinIn').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') document.getElementById('pinGo').click();
+});
+function pinResult(res, pin){
+  var b = document.getElementById('pinGo'); b.disabled = false; b.textContent = 'Unlock';
+  if (!res || !res.ok){
+    document.getElementById('pinMsg').textContent = (res && res.message) || 'Could not check the PIN.';
+    return;
+  }
+  EDT_PIN = pin;
+  document.getElementById('pinModal').classList.remove('on');
+  openEdit(PIN_ROW);
+}
+
+document.getElementById('pinGo').addEventListener('click', function(){
+  var pin = document.getElementById('pinIn').value;
+  var b = this; b.disabled = true; b.textContent = 'Checking\u2026';
+  api('checkpin', { pin: pin }).then(function(r){ pinResult(r, pin); })
+    .catch(function(e){ pinResult({ ok:false, message: e.message }, pin); });
+});
+
 /* ---------- admin: edit a task's details and score ---------- */
 var EDT = { key: '' };
 
@@ -1150,7 +1199,10 @@ document.getElementById('edCancel').addEventListener('click', function(){
 
 function afterEdit(res){
   var b = document.getElementById('edSave'); b.disabled = false; b.textContent = 'Save';
-  if (!res || !res.ok){ toast((res && res.message) || 'Could not save.', 'bad'); return; }
+  if (!res || !res.ok){
+    if (res && res.pinFail){ EDT_PIN = ''; document.getElementById('editModal').classList.remove('on'); }
+    toast((res && res.message) || 'Could not save.', 'bad'); return;
+  }
   document.getElementById('editModal').classList.remove('on');
   toast(res.message, 'good');
   loadList();
@@ -1170,7 +1222,7 @@ function editFields(){
 
 document.getElementById('edSave').addEventListener('click', function(){
   var b = this; b.disabled = true; b.textContent = 'Saving\u2026';
-  var f = editFields(); f.key = EDT.key;
+  var f = editFields(); f.key = EDT.key; f.pin = EDT_PIN;
   api('edittask', f).then(afterEdit).catch(function(e){ afterEdit({ ok:false, message: e.message }); });
 });
 
@@ -1242,7 +1294,7 @@ function loadList(){
         '<td><span class="st ' + r.state + '">' + esc(r.text) + '</span></td>' +
         '<td>' + esc(r.doneOn || '') + '</td>' +
         '<td>' + (r.score === null ? '\u2014' : r.score) + (r.manual ? ' \u270e' : '') + '</td>' +
-        '<td><button class="lbtn" style="margin:0" data-edit="' + idx + '">Edit</button></td>' +
+        '<td><button class="lbtn" style="margin:0" data-edit="' + idx + '">\ud83d\udd12 Edit</button></td>' +
         '</tr>';
     });
     h += '</tbody></table></div>' +
@@ -1252,7 +1304,7 @@ function loadList(){
       '"Open" daily work is not counted until its day has passed; open recurring and one-time work shows what it is worth today.</div>';
     document.getElementById('lstBody').innerHTML = h;
     document.querySelectorAll('#lstBody [data-edit]').forEach(function(b){
-      b.addEventListener('click', function(){ openEdit(LST.rows[Number(b.dataset.edit)]); });
+      b.addEventListener('click', function(){ askEdit(LST.rows[Number(b.dataset.edit)]); });
     });
   };
 
