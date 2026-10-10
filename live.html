@@ -280,6 +280,10 @@
       <button data-f="all">All</button><button data-f="done">Completed</button>
       <button data-f="notdone">Not completed</button><button data-f="open">Open</button>
     </div>
+    <div class="lseg" id="lstType">
+      <button data-t="all">All types</button><button data-t="DAILY">Daily</button>
+      <button data-t="RECURRING">Recurring</button><button data-t="ONETIME">One-time</button>
+    </div>
     <div id="lstBody" style="margin-top:8px"></div>
   </div>
 </div>
@@ -419,7 +423,7 @@ function loadTeam(){
     document.getElementById('teamBody').innerHTML =
       '<div class="plist">' + d.people.map(personCard).join('') + '</div>' +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.5">' +
-      'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
+      'DAY is today, OVERALL runs from the person\'s first task. ' +
       'Live: work due today that is not done yet counts as 0 until it is done. ' +
       '"Not done" means its date has passed; "open" is still due today or later. ' +
       'Daily: done = 100, else 0. Recurring / one-time: 100, 75, 50, 25, 10, 0 by working days late; a revision starts from 75 / 50 / 25.</div>';
@@ -437,7 +441,6 @@ function personCard(p){
   if (p.overdue)   foot.push('<b>' + p.overdue + ' overdue</b>' + (p.oldest ? ', oldest ' + p.oldest + 'd' : ''));
   if (p.upcoming)  foot.push(p.upcoming + ' coming up');
   if (p.lastAt)    foot.push('last closed ' + esc(p.lastAt));
-  if (p.weekTasks) foot.push('week ' + p.weekDone + '/' + p.weekTasks + (p.revisions ? ', ' + p.revisions + ' rev' : ''));
 
   return '<div class="pcard ' + cls + '">' +
     '<div class="top"><div>' +
@@ -445,7 +448,6 @@ function personCard(p){
       (p.dept ? '<div class="dp">' + esc(p.dept) + '</div>' : '') +
     '</div><div class="scs">' +
       chip('DAY',     p.dayScore,     p.dayDetail,     true) +
-      chip('WEEK',    p.weekScore,    p.weekDetail,    false) +
       chip('OVERALL', p.overallScore, (p.overallDetail || '') + (p.since ? '  since ' + p.since : ''), true) +
     '</div></div>' +
     '<div class="nums">' +
@@ -457,7 +459,6 @@ function personCard(p){
     scBlock(p) +
     '<div class="cn3">' +
       '<div><b>DAY</b>' + cnt(p.dayCounts, true) + '</div>' +
-      '<div><b>WEEK</b>' + cnt(p.weekCounts) + '</div>' +
       '<div><b>OVERALL</b>' + cnt(p.overallCounts) + '</div>' +
     '</div>' +
     '<button class="lbtn" data-list="' + esc(p.name) + '">View task list</button>' +
@@ -617,7 +618,7 @@ function loadScores(){
 
 /* ---------- helpers ---------- */
 /* ---------- a person's task list: Day / Week / Overall ---------- */
-var LST = { name: '', scope: 'day', filter: 'all', wk: 0 };
+var LST = { name: '', scope: 'day', filter: 'all', type: 'all', wk: 0 };
 
 /* "5 tasks · 3 done · 2 not done · 1 open" */
 function cnt(c, showOpen){
@@ -638,7 +639,7 @@ function lbox(k, v, cls, sub, color){
 }
 
 function openList(name, scope, wk){
-  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.wk = wk || 0;
+  LST.name = name; LST.scope = scope || 'day'; LST.filter = 'all'; LST.type = 'all'; LST.wk = wk || 0;
   document.getElementById('listModal').classList.add('on');
   loadList();
 }
@@ -648,6 +649,7 @@ function closeList(){ document.getElementById('listModal').classList.remove('on'
 function loadList(){
   document.querySelectorAll('#lstScope button').forEach(function(b){ b.classList.toggle('on', b.dataset.s === LST.scope); });
   document.querySelectorAll('#lstFilter button').forEach(function(b){ b.classList.toggle('on', b.dataset.f === LST.filter); });
+  document.querySelectorAll('#lstType button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === LST.type); });
   document.getElementById('lstTitle').textContent = LST.name;
   document.getElementById('lstSub').textContent = 'Loading\u2026';
   document.getElementById('lstSum').innerHTML = '';
@@ -663,8 +665,8 @@ function loadList(){
 
     document.getElementById('lstSum').innerHTML = '<div class="lsum">' +
       lbox('TOTAL', c.total, '') +
-      lbox('COMPLETED', c.done, 'g', 'each scores 100') +
-      lbox('NOT COMPLETED', c.notDone, c.notDone ? 'r' : '', 'date passed, scores 0') +
+      lbox('COMPLETED', c.done, 'g', 'done') +
+      lbox('NOT COMPLETED', c.notDone, c.notDone ? 'r' : '', 'date passed') +
       lbox('OPEN', c.open, c.open ? 'm' : '', 'not counted yet') +
       lbox('SCORE', sShow(d.score), '', '', sCol(d.score)) +
     '</div>';
@@ -688,8 +690,8 @@ function loadList(){
     }).join('') +
     '<div style="font-size:11px;color:var(--muted);margin:8px 2px;line-height:1.5">' +
       (d.matching > d.shown ? 'Showing the latest ' + d.shown + ' of ' + d.matching + '. ' : '') +
-      'A task scores 100 if it is completed and 0 if it is not. Revising it, or finishing it after its date, ' +
-      'does not reduce the score. "Open" is not counted until its date has passed.</div>';
+      'Daily: done = 100, else 0. Recurring and one-time: 100, 75, 50, 25, 10, 0 by working days late, and a revision starts from 75 / 50 / 25. ' +
+      '"Open" daily work is not counted until its day has passed; open recurring and one-time work shows what it is worth today.</div>';
   };
 
   var fail = function(e){
@@ -698,7 +700,7 @@ function loadList(){
       '<div class="empty">' + esc(e && e.message ? e.message : 'Could not load the list.') + '</div>';
   };
 
-  api({ api:'doertasks', name: LST.name, scope: LST.scope, w: LST.wk, filter: LST.filter },
+  api({ api:'doertasks', name: LST.name, scope: LST.scope, w: LST.wk, filter: LST.filter, type: LST.type },
     function(d){ if (!d || !d.ok) return fail(d); ok(d); },
     function(why){ fail({ message: String(why || 'Could not load the list.') }); });
 }
@@ -708,6 +710,10 @@ document.getElementById('listModal').addEventListener('click', function(e){ if (
 document.getElementById('lstScope').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   LST.scope = b.dataset.s; loadList();
+});
+document.getElementById('lstType').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  LST.type = b.dataset.t; loadList();
 });
 document.getElementById('lstFilter').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
@@ -740,20 +746,13 @@ function scFormula(label, P){
   return '<div><b>' + label + '</b>  ' + parts.join(' + ') + ' = <b>' + P.total + '</b></div>';
 }
 function scBlock(p){
-  if (!p.dayParts && !p.weekParts && !p.overallParts) return '';
+  if (!p.dayParts && !p.overallParts) return '';
   var h = '<div class="scb"><table><tr><th></th><th>DAILY</th><th>RECURRING</th><th>ONE-TIME</th><th>SCORE</th></tr>' +
     scRow('TODAY',   p.dayParts,     p.dayScore) +
-    scRow('WEEK',    p.weekParts,    p.weekScore) +
     scRow('OVERALL', p.overallParts, p.overallScore) +
     '</table>';
   h += '<div class="frm">' + scFormula('TODAY', p.dayParts) + scFormula('OVERALL', p.overallParts) +
        '<div style="font-size:9.5px;font-weight:500">weights re-balanced over the task types this person has</div></div>';
-  if (p.fell && p.fell.length){
-    h += '<div class="lst"><h6>TASKS THAT COST SCORE</h6>' + p.fell.map(function(x){
-      return '<div title="' + esc(x.task + ' \u00b7 due ' + x.due) + '"><span>' + esc(x.task) + ' <i>(' + esc(x.why) + ')</i></span>' +
-             '<b style="color:' + sCol(x.score) + '">' + x.score + '</b></div>';
-    }).join('') + '</div>';
-  }
   if (p.pend && p.pend.length){
     h += '<div class="lst"><h6>PENDING, RUNNING OVERDUE</h6>' + p.pend.map(function(x){
       return '<div title="' + esc(x.task) + '"><span>' + esc(x.task) + ' <i>(due ' + esc(x.due) + ', ' + x.late + 'd)</i></span>' +
