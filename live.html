@@ -406,7 +406,7 @@ function loadTeam(){
       'DAY is today, WEEK is this week so far, OVERALL runs from the person\'s first task. ' +
       'Live: work due today that is not done yet counts as 0 until it is done. ' +
       '"Not done" means its date has passed; "open" is still due today or later. ' +
-      'Completed = 100, not completed = 0; revisions do not reduce it.</div>';
+      'Daily: done = 100, else 0. Recurring / one-time: 100, 75, 50, 25, 10, 0 by working days late; a revision starts from 75 / 50 / 25.</div>';
 
     document.querySelectorAll('#teamBody [data-list]').forEach(function(b){
       b.addEventListener('click', function(){ openList(b.dataset.list, 'day', 0); });
