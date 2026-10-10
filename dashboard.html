@@ -423,9 +423,9 @@ var BOOT  = null, PEND = null, RPT = null, WKOFF = 0, TYPE = 'RECURRING', REVKEY
 var DELMODE = null, DELKEY = null, DELTASKID = null;
 
 var HINTS = {
-  DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Not done by the end of its day it is marked Not Completed (0) and is not sent again. Up to 3 revisions, which do not reduce the score. Completed = 100, not completed = 0.',
-  RECURRING: 'Repeats on the pattern you choose. Reminded the working day before, then every day until it is done. Up to 3 revisions, which do not reduce the score. Completed = 100, not completed = 0.',
-  ONETIME  : 'Sent to the person the moment you create it, then every working day until it is done. Up to 3 revisions, which do not reduce the score. Completed = 100, not completed = 0.'
+  DAILY    : 'Runs every working day from the start date. Reminded the working day before, once. Not done by the end of its day it is marked Not Completed (0) and is not sent again. Up to 3 revisions. Done = 100 (75 / 50 / 25 after 1 / 2 / 3 revisions), else 0.',
+  RECURRING: 'Repeats on the pattern you choose. Reminded the working day before, then every day until it is done. Up to 3 revisions. Stays open until done; each working day late scores 100, 75, 50, 25, 10, 0 (a revision starts from 75 / 50 / 25).',
+  ONETIME  : 'Sent to the person the moment you create it, then every working day until it is done. Up to 3 revisions. Stays open until done; each working day late scores 100, 75, 50, 25, 10, 0 (a revision starts from 75 / 50 / 25).'
 };
 
 /* ---------- transport ----------
@@ -912,8 +912,8 @@ function loadScores(){
     h += '</tbody></table></div>' +
       '<div class="empty" style="padding:14px;font-size:12px;text-align:left">' +
       'DAY is ' + esc(s.asOn) + ', WEEK is the week shown, OVERALL runs from each person\'s first task up to ' + esc(s.asOn) + '. ' +
-      'Today\'s unfinished work counts as 0 until it is done. A task scores 100 if completed ' +
-      'and 0 if not; revisions do not reduce it. ' +
+      'Today\'s unfinished work counts as 0 until it is done. Daily: 100 if done, else 0. Recurring and one-time: ' +
+      '100, 75, 50, 25, 10, 0 by working days late. ' +
       'Daily 25% + Recurring 35% + One-time 40%.</div>';
     document.getElementById('scoreBody').innerHTML = h;
 
