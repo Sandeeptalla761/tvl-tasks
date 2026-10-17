@@ -831,7 +831,7 @@ function wirePending(){
       document.getElementById('delTitle').textContent = 'Delete the entire task (all days)';
       document.getElementById('delTask').textContent = b.dataset.task;
       document.getElementById('delWarn').textContent =
-        'This switches the task off for good and removes it from every open day, not just this one. Completed history is kept. This cannot be undone.';
+        'This deletes the task completely: every day, open and completed. It will no longer show anywhere (lists, Live, Score Card) and scores are recalculated without it. This cannot be undone.';
       document.getElementById('delModal').classList.add('on');
     });
   });
