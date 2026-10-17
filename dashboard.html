@@ -749,9 +749,9 @@ function loadPending(){
               (r.canRevise ? '<button class="btn sm rev" data-rev="' + esc(r.key) +
                  '" data-task="' + esc(r.task) + '">Move</button> ' : '') +
               '<button class="btn sm danger" data-delone="' + esc(r.key) +
-                 '" data-task="' + esc(r.task) + '">Delete</button> ' +
+                 '" data-task="' + esc(r.task) + '" title="Remove only this day\'s task">Delete This Day</button> ' +
               '<button class="btn sm danger" data-deltask="' + esc(r.taskId) +
-                 '" data-task="' + esc(r.task) + '">Delete Task</button>') +
+                 '" data-task="' + esc(r.task) + '" title="Remove the task for ALL days">Delete Entire Task</button>') +
         '</td></tr>';
     });
 
@@ -811,12 +811,12 @@ function wirePending(){
     b.addEventListener('click', function(){
       DELMODE = 'one';
       document.getElementById('delConfirm').className = 'btn danger';
-      document.getElementById('delConfirm').textContent = 'Delete';
+      document.getElementById('delConfirm').textContent = 'Delete This Day';
       DELKEY = b.dataset.delone;
-      document.getElementById('delTitle').textContent = 'Delete this task';
+      document.getElementById('delTitle').textContent = 'Delete this day only';
       document.getElementById('delTask').textContent = b.dataset.task;
       document.getElementById('delWarn').textContent =
-        'This removes only this one occurrence. It cannot be undone.';
+        'This removes only the task for the date shown on this row. The task stays active and will still appear on its other days. It cannot be undone.';
       document.getElementById('delModal').classList.add('on');
     });
   });
@@ -826,12 +826,12 @@ function wirePending(){
     b.addEventListener('click', function(){
       DELMODE = 'task';
       document.getElementById('delConfirm').className = 'btn danger';
-      document.getElementById('delConfirm').textContent = 'Delete';
+      document.getElementById('delConfirm').textContent = 'Delete Entire Task';
       DELTASKID = b.dataset.deltask;
-      document.getElementById('delTitle').textContent = 'Delete the whole task';
+      document.getElementById('delTitle').textContent = 'Delete the entire task (all days)';
       document.getElementById('delTask').textContent = b.dataset.task;
       document.getElementById('delWarn').textContent =
-        'This stops it recurring and removes every open occurrence of it, not just this one. Completed history is kept. This cannot be undone.';
+        'This switches the task off for good and removes it from every open day, not just this one. Completed history is kept. This cannot be undone.';
       document.getElementById('delModal').classList.add('on');
     });
   });
