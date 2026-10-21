@@ -284,6 +284,9 @@
             <option value="all">Everything open</option>
             <option value="today">Due today</option>
             <option value="overdue">Overdue only</option>
+            <option value="done">Completed tasks</option>
+            <option value="notdone">Not completed tasks</option>
+            <option value="closed">Completed + not completed</option>
             <option value="missed">Past days closed as not done (last 30 days)</option>
           </select></div>
         <div class="fld"><label>SEARCH</label>
@@ -715,9 +718,12 @@ function loadPending(){
     var d = res.data;
     PEND = d;
 
-    var isMissed = document.getElementById('fScope').value === 'missed';
-    document.getElementById('pendHead').textContent = isMissed
-      ? 'PAST DAYS CLOSED AS NOT DONE — ' + d.shown + ' in the last 30 days'
+    var sc = document.getElementById('fScope').value;
+    document.getElementById('pendHead').textContent =
+        sc === 'missed'  ? 'PAST DAYS CLOSED AS NOT DONE — ' + d.shown + ' in the last 30 days'
+      : sc === 'done'    ? 'COMPLETED TASKS — ' + d.shown + ' shown (newest first)'
+      : sc === 'notdone' ? 'NOT COMPLETED TASKS — ' + d.shown + ' shown (newest first)'
+      : sc === 'closed'  ? 'COMPLETED + NOT COMPLETED — ' + d.shown + ' shown (newest first)'
       : 'OPEN TASKS — ' + d.shown + ' shown of ' + d.total + ' open';
 
     if (!d.rows.length){
@@ -739,12 +745,13 @@ function loadPending(){
         '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span></td>' +
         '<td>' + esc(r.due) +
           (r.late ? '<div><span class="pill late">' + r.late + 'd late</span></div>' : '') +
-          (r.closed ? '<div><span class="pill late">' + esc(r.status) + '</span></div>' : '') + '</td>' +
+          (r.closed ? '<div><span class="pill ' + (r.status === 'Completed' ? 'ok' : 'late') + '">' + esc(r.status) + (r.doneOn ? ' ' + esc(r.doneOn) : '') + '</span></div>' : '') + '</td>' +
         '<td>' + (r.revisions ? '<span class="pill rev">' + r.revisions + '</span>' : '0') + '</td>' +
         '<td style="white-space:nowrap">' +
           (r.closed
-            ? '<button class="btn sm done" data-fix="' + esc(r.key) +
-                '" data-task="' + esc(r.task) + '">Mark completed</button>'
+            ? ((r.status === 'Completed' ? '' : '<button class="btn sm done" data-fix="' + esc(r.key) + '" data-task="' + esc(r.task) + '">Mark completed</button> ') +
+               '<button class="btn sm danger" data-delone="' + esc(r.key) + '" data-closed="1" data-task="' + esc(r.task) + '" title="Remove only this day\'s record">Delete This Day</button> ' +
+               '<button class="btn sm danger" data-deltask="' + esc(r.taskId) + '" data-task="' + esc(r.task) + '" title="Remove the task for ALL days">Delete Entire Task</button>')
             : '<button class="btn sm done" data-done="' + esc(r.key) + '">Done</button> ' +
               (r.canRevise ? '<button class="btn sm rev" data-rev="' + esc(r.key) +
                  '" data-task="' + esc(r.task) + '">Move</button> ' : '') +
@@ -815,8 +822,9 @@ function wirePending(){
       DELKEY = b.dataset.delone;
       document.getElementById('delTitle').textContent = 'Delete this day only';
       document.getElementById('delTask').textContent = b.dataset.task;
-      document.getElementById('delWarn').textContent =
-        'This removes only the task for the date shown on this row. The task stays active and will still appear on its other days. It cannot be undone.';
+      document.getElementById('delWarn').textContent = b.dataset.closed
+        ? 'This removes this day\'s record, including its score. The person\'s totals are recalculated without it. The task stays active. It cannot be undone.'
+        : 'This removes only the task for the date shown on this row. The task stays active and will still appear on its other days. It cannot be undone.';
       document.getElementById('delModal').classList.add('on');
     });
   });
