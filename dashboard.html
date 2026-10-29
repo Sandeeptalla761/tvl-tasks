@@ -220,6 +220,7 @@
 <div class="tabs">
   <button class="on" data-tab="add">Add Task</button>
   <button data-tab="pending">Pending</button>
+  <button data-tab="eacheck">EA Check</button>
   <button data-tab="score">Score Card</button>
   <button data-tab="report">Reports</button>
 </div>
@@ -301,6 +302,48 @@
     <div class="card">
       <h2 id="pendHead">OPEN TASKS</h2>
       <div id="pendBody"><div class="empty"><div class="spin"></div>Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- ============ EA CHECK ============ -->
+  <div id="tab-eacheck" class="hide">
+    <div class="card">
+      <div class="body">
+        <div class="grid">
+          <div class="fld"><label>DAY</label>
+            <input type="date" id="eaDate"></div>
+          <div class="fld"><label>PERSON</label>
+            <select id="eaDoer"><option value="">Everyone</option></select></div>
+          <div class="fld"><label>TYPE</label>
+            <select id="eaType">
+              <option value="">All types</option>
+              <option value="DAILY">Daily</option>
+              <option value="RECURRING">Recurring</option>
+              <option value="ONETIME">One-time</option>
+            </select></div>
+          <div class="fld"><label>EA CHECK</label>
+            <select id="eaVerdict">
+              <option value="all">All</option>
+              <option value="unchecked">Not checked yet</option>
+              <option value="ok">OK</option>
+              <option value="notok">Not OK</option>
+            </select></div>
+          <div class="fld"><label>SEARCH</label>
+            <input type="text" id="eaQ" placeholder="Task or person…"></div>
+          <div class="fld"><label>CHECKED BY</label>
+            <input type="text" id="eaBy" placeholder="EA name (optional)"></div>
+        </div>
+        <button class="btn" id="eaPrev">&#9664; Previous day</button>
+        <button class="btn" id="eaToday">Today</button>
+        <button class="btn" id="eaNext">Next day &#9654;</button>
+        <button class="btn" id="eaRefresh">Refresh</button>
+        <div style="margin-top:10px;font-size:12px;color:#6b7280">For cross-checking only. Marking OK or Not OK does not change any task, score or report.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 id="eaHead">COMPLETED TASKS</h2>
+      <div class="body"><div class="kpis" id="eaKpis"></div></div>
+      <div id="eaBody"><div class="empty">Pick a day.</div></div>
     </div>
   </div>
 
@@ -614,10 +657,11 @@ document.querySelectorAll('.tabs button').forEach(function(b){
   b.addEventListener('click', function(){
     document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
     b.classList.add('on');
-    ['add','pending','score','report'].forEach(function(t){
+    ['add','pending','eacheck','score','report'].forEach(function(t){
       document.getElementById('tab-' + t).classList.toggle('hide', t !== b.dataset.tab);
     });
     if (b.dataset.tab === 'pending' && !PEND) loadPending();
+    if (b.dataset.tab === 'eacheck') loadEa();
     if (b.dataset.tab === 'score') loadScores();
     if (b.dataset.tab === 'report') initReport();
   });
@@ -1385,6 +1429,126 @@ if ('serviceWorker' in navigator){
     });
   });
 }
+
+function eaFetch(f, ok, fail){
+  api('eaday', f).then(function(res){
+    if (!res.ok) throw new Error(res.message || 'Could not load.');
+    ok(res.data);
+  }).catch(fail);
+}
+function eaMark(key, verdict, note, ok, fail){
+  api('eamark', { key: key, verdict: verdict, note: note, by: document.getElementById('eaBy').value })
+    .then(ok).catch(fail);
+}
+
+/* ---------- EA check (cross-checking only; writes to the EA Checks tab) ---------- */
+var EA = { init: false, d: null };
+
+function eaIso(d){ return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+function eaInit(){
+  var sel = document.getElementById('eaDoer');
+  if (sel.options.length < 2 && document.getElementById('fDoer').options.length > 1){
+    sel.innerHTML = document.getElementById('fDoer').innerHTML;
+  }
+  if (EA.init) return;
+  EA.init = true;
+  document.getElementById('eaDate').value = eaIso(new Date());
+  try { document.getElementById('eaBy').value = localStorage.getItem('tvl_ea_by') || ''; } catch(e){}
+
+  ['eaDate','eaDoer','eaType','eaVerdict'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', function(){ loadEa(); });
+  });
+  document.getElementById('eaQ').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadEa(); });
+  document.getElementById('eaBy').addEventListener('change', function(){
+    try { localStorage.setItem('tvl_ea_by', this.value); } catch(e){}
+  });
+  document.getElementById('eaRefresh').addEventListener('click', function(){ loadEa(); });
+  document.getElementById('eaToday').addEventListener('click', function(){
+    document.getElementById('eaDate').value = eaIso(new Date()); loadEa();
+  });
+  document.getElementById('eaPrev').addEventListener('click', function(){ eaShift(-1); });
+  document.getElementById('eaNext').addEventListener('click', function(){ eaShift(1); });
+
+  document.getElementById('eaBody').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-eak]'); if (!b) return;
+    var verdict = b.dataset.eav, note = '';
+    if (verdict === 'NOT OK'){
+      note = window.prompt('Not OK: what is wrong? (optional, for your own reference)', '');
+      if (note === null) return;
+    }
+    b.disabled = true;
+    eaMark(b.dataset.eak, verdict, note, function(r){
+      toast(r.message, r.ok ? (verdict === 'NOT OK' ? 'bad' : 'good') : 'bad');
+      loadEa(true);
+    }, function(err){ b.disabled = false; toast(err.message, 'bad'); });
+  });
+}
+
+function eaShift(n){
+  var v = document.getElementById('eaDate').value || eaIso(new Date());
+  var d = new Date(v + 'T00:00:00'); d.setDate(d.getDate() + n);
+  document.getElementById('eaDate').value = eaIso(d);
+  loadEa();
+}
+
+function eaFilter(){
+  return {
+    date: document.getElementById('eaDate').value,
+    doer: document.getElementById('eaDoer').value,
+    type: document.getElementById('eaType').value,
+    verdict: document.getElementById('eaVerdict').value,
+    q: document.getElementById('eaQ').value
+  };
+}
+
+function loadEa(silent){
+  eaInit();
+  if (!silent) document.getElementById('eaBody').innerHTML = '<div class="empty"><div class="spin"></div>Loading…</div>';
+  eaFetch(eaFilter(), function(d){ EA.d = d; eaRender(d); }, function(err){
+    document.getElementById('eaBody').innerHTML = '<div class="empty">' + esc(err.message) + '</div>';
+  });
+}
+
+function eaRender(d){
+  document.getElementById('eaHead').textContent = 'COMPLETED ON ' + d.label + ' — ' + d.shown + ' shown of ' + d.total;
+  document.getElementById('eaKpis').innerHTML =
+    '<div class="kpi"><div class="k">COMPLETED</div><div class="v">' + d.total + '</div></div>' +
+    '<div class="kpi g"><div class="k">EA: OK</div><div class="v">' + d.ok + '</div></div>' +
+    '<div class="kpi r"><div class="k">EA: NOT OK</div><div class="v">' + d.notok + '</div></div>' +
+    '<div class="kpi a"><div class="k">NOT CHECKED YET</div><div class="v">' + d.unchecked + '</div></div>';
+
+  if (!d.rows.length){
+    document.getElementById('eaBody').innerHTML = '<div class="empty">No completed tasks match for this day.</div>';
+    return;
+  }
+  var h = '<div style="overflow-x:auto"><table><thead><tr>' +
+    '<th>PERSON</th><th>TASK</th><th>TYPE</th><th>DONE</th><th>SCORE</th><th>EA CHECK</th><th></th>' +
+    '</tr></thead><tbody>';
+  d.rows.forEach(function(r){
+    var st = r.verdict === 'OK' ? '<span class="pill ok">OK</span>'
+           : r.verdict === 'NOT OK' ? '<span class="pill late">NOT OK</span>'
+           : '<span class="pill">Not checked</span>';
+    var who = r.verdict ? '<div class="sub">' + esc(r.by) + (r.on ? ' &middot; ' + esc(r.on) : '') + '</div>' : '';
+    h += '<tr' + (r.verdict === 'NOT OK' ? ' style="background:#fdeeee"' : '') + '>' +
+      '<td><div class="nm">' + esc(r.doer) + '</div><div class="sub">' + esc(r.taskId) + '</div></td>' +
+      '<td>' + esc(r.task) + (r.note ? '<div class="sub">EA note: ' + esc(r.note) + '</div>' : '') + '</td>' +
+      '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span></td>' +
+      '<td>' + (r.doneAt ? esc(r.doneAt) : '&mdash;') + '</td>' +
+      '<td>' + (r.score === null ? '&mdash;' : esc(r.score)) + '</td>' +
+      '<td>' + st + who + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn sm done" data-eak="' + esc(r.key) + '" data-eav="OK">&#10004; OK</button> ' +
+        '<button class="btn sm danger" data-eak="' + esc(r.key) + '" data-eav="NOT OK">&#10006; Not OK</button>' +
+        (r.verdict ? ' <button class="btn sm" data-eak="' + esc(r.key) + '" data-eav="">Clear</button>' : '') +
+      '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (d.capped) h += '<div class="empty">Showing the first 500. Narrow the filters for the rest.</div>';
+  document.getElementById('eaBody').innerHTML = h;
+}
+
+
 </script>
 </body>
 </html>
