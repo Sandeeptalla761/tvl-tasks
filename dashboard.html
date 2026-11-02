@@ -221,6 +221,7 @@
   <button class="on" data-tab="add">Add Task</button>
   <button data-tab="pending">Pending</button>
   <button data-tab="eacheck">EA Check</button>
+  <button data-tab="admin">&#128274; Admin</button>
   <button data-tab="score">Score Card</button>
   <button data-tab="report">Reports</button>
 </div>
@@ -344,6 +345,62 @@
       <h2 id="eaHead">COMPLETED TASKS</h2>
       <div class="body"><div class="kpis" id="eaKpis"></div></div>
       <div id="eaBody"><div class="empty">Pick a day.</div></div>
+    </div>
+  </div>
+
+  <!-- ============ ADMIN ============ -->
+  <div id="tab-admin" class="hide">
+    <div class="card" id="admLock">
+      <div class="body">
+        <h2 style="margin:0 0 6px">&#128274; Admin</h2>
+        <div style="font-size:13px;color:#6b7280;margin-bottom:14px">See every task of a person, edit a task or its score, delete one day or the whole task. Needs the admin PIN.</div>
+        <div class="fld" style="max-width:320px"><input type="password" id="admPin" autocomplete="off" inputmode="numeric" placeholder="Admin PIN"></div>
+        <div id="admMsg" style="color:#b42318;font-weight:600;min-height:18px;margin-bottom:8px;font-size:13px"></div>
+        <button class="btn primary" id="admGo">Unlock</button>
+      </div>
+    </div>
+
+    <div id="admMain" class="hide">
+      <div class="card">
+        <div class="body">
+          <div class="grid">
+            <div class="fld"><label>PERSON</label>
+              <select id="admDoer"><option value="">Everyone</option></select></div>
+            <div class="fld"><label>DAYS</label>
+              <select id="admRange">
+                <option value="today">Today</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="all">All days up to today</option>
+                <option value="upcoming">Upcoming (after today)</option>
+                <option value="everything">Everything</option>
+              </select></div>
+            <div class="fld"><label>STATUS</label>
+              <select id="admStatus">
+                <option value="all">All</option>
+                <option value="open">Open</option>
+                <option value="completed">Completed</option>
+                <option value="notdone">Not completed</option>
+              </select></div>
+            <div class="fld"><label>TYPE</label>
+              <select id="admType">
+                <option value="">All types</option>
+                <option value="DAILY">Daily</option>
+                <option value="RECURRING">Recurring</option>
+                <option value="ONETIME">One-time</option>
+              </select></div>
+            <div class="fld"><label>SEARCH</label>
+              <input type="text" id="admQ" placeholder="Task text…"></div>
+          </div>
+          <button class="btn" id="admRefresh">Refresh</button>
+          <button class="btn" id="admLockBtn">&#128274; Lock</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2 id="admHead">TASKS</h2>
+        <div class="body"><div class="kpis" id="admKpis"></div></div>
+        <div id="admBody"><div class="empty">Pick a person.</div></div>
+      </div>
     </div>
   </div>
 
@@ -657,11 +714,12 @@ document.querySelectorAll('.tabs button').forEach(function(b){
   b.addEventListener('click', function(){
     document.querySelectorAll('.tabs button').forEach(function(x){ x.classList.remove('on'); });
     b.classList.add('on');
-    ['add','pending','eacheck','score','report'].forEach(function(t){
+    ['add','pending','eacheck','admin','score','report'].forEach(function(t){
       document.getElementById('tab-' + t).classList.toggle('hide', t !== b.dataset.tab);
     });
     if (b.dataset.tab === 'pending' && !PEND) loadPending();
     if (b.dataset.tab === 'eacheck') loadEa();
+    if (b.dataset.tab === 'admin') { admInit(); admOpen(); }
     if (b.dataset.tab === 'score') loadScores();
     if (b.dataset.tab === 'report') initReport();
   });
@@ -900,19 +958,23 @@ document.getElementById('delCancel').addEventListener('click', function(){
 
 document.getElementById('delConfirm').addEventListener('click', function(){
   var b = this;
+  var mode = DELMODE;
   var lbl = (DELMODE === 'fix') ? 'Mark completed' : 'Delete';
   b.disabled = true; b.textContent = (DELMODE === 'fix') ? 'Saving…' : 'Deleting…';
 
   var call = DELMODE === 'fix'  ? api('fixdone', { key: DELKEY })
            : DELMODE === 'one'  ? api('deleteone', { key: DELKEY })
            : DELMODE === 'task' ? api('deletetask', { taskId: DELTASKID })
+           : DELMODE === 'aone' ? api('admindel1', { key: DELKEY, pin: ADM.pin })
+           : DELMODE === 'atask' ? api('admindeltask', { taskId: DELTASKID, pin: ADM.pin })
            : Promise.resolve({ ok: false, message: 'Nothing selected.' });
 
   call.then(function(r){
     b.disabled = false; b.textContent = lbl;
     document.getElementById('delModal').classList.remove('on');
     toast(r.message, r.ok ? 'good' : 'bad');
-    if (r.ok) loadPending();
+    if (r && r.pinFail) admLockNow();
+    if (r.ok) { if (mode === 'aone' || mode === 'atask') loadAdmin(true); else loadPending(); }
   }).catch(function(e){
     b.disabled = false; b.textContent = lbl;
     document.getElementById('delModal').classList.remove('on');
@@ -1261,7 +1323,8 @@ function afterEdit(res){
   }
   document.getElementById('editModal').classList.remove('on');
   toast(res.message, 'good');
-  loadList();
+  if (document.getElementById('listModal').classList.contains('on')) loadList();
+  if (ADM.pin && !document.getElementById('tab-admin').classList.contains('hide')) loadAdmin(true);
   if (typeof loadScores === 'function') loadScores();
 }
 
@@ -1548,6 +1611,161 @@ function eaRender(d){
   document.getElementById('eaBody').innerHTML = h;
 }
 
+
+
+function admCheck(pin, cb){
+  api('checkpin', { pin: pin }).then(cb).catch(function(e){ cb({ ok:false, message: e.message }); });
+}
+function admFetch(f, ok, fail){
+  f.pin = ADM.pin;
+  api('adminlist', f).then(ok).catch(fail);
+}
+
+/* ---------- admin console: every task of a person, edit, delete (PIN-protected) ---------- */
+var ADM = { pin: '', init: false, rows: [] };
+
+function admShow(unlocked){
+  document.getElementById('admLock').classList.toggle('hide', unlocked);
+  document.getElementById('admMain').classList.toggle('hide', !unlocked);
+}
+
+function admLockNow(){
+  ADM.pin = ''; ADM.rows = [];
+  try { EDT_PIN = ''; } catch(e){}
+  document.getElementById('admPin').value = '';
+  document.getElementById('admMsg').textContent = '';
+  admShow(false);
+}
+
+function admOpen(){
+  if (ADM.pin){ admShow(true); loadAdmin(); return; }
+  admShow(false);
+  setTimeout(function(){ document.getElementById('admPin').focus(); }, 50);
+}
+
+function admInit(){
+  if (ADM.init) return;
+  ADM.init = true;
+  document.getElementById('admGo').addEventListener('click', function(){
+    var pin = document.getElementById('admPin').value, b = this;
+    b.disabled = true; b.textContent = 'Checking…';
+    admCheck(pin, function(r){
+      b.disabled = false; b.textContent = 'Unlock';
+      if (!r || !r.ok){ document.getElementById('admMsg').textContent = (r && r.message) || 'Could not check the PIN.'; return; }
+      ADM.pin = pin;
+      try { EDT_PIN = pin; } catch(e){}          // edit boxes open without asking again
+      document.getElementById('admMsg').textContent = '';
+      document.getElementById('admPin').value = '';
+      var sel = document.getElementById('admDoer');
+      if (sel.options.length < 2) sel.innerHTML = document.getElementById('fDoer').innerHTML;
+      admShow(true); loadAdmin();
+    });
+  });
+  document.getElementById('admPin').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('admGo').click(); });
+  ['admDoer','admRange','admStatus','admType'].forEach(function(id){
+    document.getElementById(id).addEventListener('change', function(){ loadAdmin(); });
+  });
+  document.getElementById('admQ').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadAdmin(); });
+  document.getElementById('admRefresh').addEventListener('click', function(){ loadAdmin(); });
+  document.getElementById('admLockBtn').addEventListener('click', admLockNow);
+}
+
+function admFilter(){
+  return {
+    doer: document.getElementById('admDoer').value,
+    range: document.getElementById('admRange').value,
+    status: document.getElementById('admStatus').value,
+    type: document.getElementById('admType').value,
+    q: document.getElementById('admQ').value
+  };
+}
+
+function loadAdmin(silent){
+  admInit();
+  if (!ADM.pin) return;
+  if (!silent) document.getElementById('admBody').innerHTML = '<div class="empty"><div class="spin"></div>Loading…</div>';
+  admFetch(admFilter(), function(res){
+    if (!res || !res.ok){
+      if (res && res.pinFail) admLockNow();
+      document.getElementById('admBody').innerHTML = '<div class="empty">' + esc((res && res.message) || 'Could not load.') + '</div>';
+      return;
+    }
+    admRender(res.data);
+  }, function(err){
+    document.getElementById('admBody').innerHTML = '<div class="empty">' + esc(err.message) + '</div>';
+  });
+}
+
+function admRender(d){
+  ADM.rows = d.rows;
+  var who = d.doer || 'EVERYONE';
+  document.getElementById('admHead').textContent = who.toUpperCase() + ' — ' + d.shown + ' shown' + (d.matching > d.shown ? ' of ' + d.matching : '');
+  var c = d.counts || {};
+  document.getElementById('admKpis').innerHTML =
+    '<div class="kpi"><div class="k">TASKS (THIS VIEW)</div><div class="v">' + (c.total || 0) + '</div></div>' +
+    '<div class="kpi g"><div class="k">COMPLETED</div><div class="v">' + (c.done || 0) + '</div></div>' +
+    '<div class="kpi r"><div class="k">NOT COMPLETED</div><div class="v">' + (c.notDone || 0) + '</div></div>' +
+    '<div class="kpi a"><div class="k">OPEN</div><div class="v">' + (c.open || 0) + '</div></div>' +
+    (d.score === null || d.score === undefined ? '' :
+      '<div class="kpi ' + (d.score >= 75 ? 'g' : d.score >= 50 ? 'a' : 'r') + '"><div class="k">OVERALL SCORE</div><div class="v">' + d.score + '</div></div>');
+
+  if (!d.rows.length){
+    document.getElementById('admBody').innerHTML = '<div class="empty">No tasks match these filters.</div>';
+    return;
+  }
+  var h = '<div style="overflow-x:auto"><table><thead><tr>' +
+    (d.doer ? '' : '<th>PERSON</th>') +
+    '<th>DUE</th><th>TASK</th><th>TYPE</th><th>STATUS</th><th>REV</th><th>DONE ON</th><th>SCORE</th><th></th>' +
+    '</tr></thead><tbody>';
+  d.rows.forEach(function(r, i){
+    var pill = r.state === 'done' ? 'ok' : (r.state === 'missed' || r.state === 'lapsed') ? 'late' : '';
+    h += '<tr>' +
+      (d.doer ? '' : '<td><div class="nm">' + esc(r.doer) + '</div></td>') +
+      '<td>' + esc(r.due) + '</td>' +
+      '<td>' + esc(r.task) + '<div class="sub">' + esc(r.taskId) + '</div></td>' +
+      '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span></td>' +
+      '<td><span class="pill ' + pill + '">' + esc(r.text) + '</span></td>' +
+      '<td>' + (r.revisions || 0) + '</td>' +
+      '<td>' + esc(r.doneOn || '') + '</td>' +
+      '<td>' + (r.score === null ? '—' : esc(r.score)) + (r.manual ? ' ✎' : '') + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn sm" data-aed="' + i + '">&#128274; Edit</button> ' +
+        '<button class="btn sm danger" data-a1="' + esc(r.key) + '" data-task="' + esc(r.task) + '">Delete This Day</button> ' +
+        '<button class="btn sm danger" data-at="' + esc(r.taskId) + '" data-task="' + esc(r.task) + '">Delete Entire Task</button>' +
+      '</td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (d.matching > d.shown) h += '<div class="empty">Showing the first ' + d.shown + ' of ' + d.matching + '. Narrow the filters to see the rest.</div>';
+  document.getElementById('admBody').innerHTML = h;
+
+  document.querySelectorAll('#admBody [data-aed]').forEach(function(b){
+    b.addEventListener('click', function(){ askEdit(ADM.rows[Number(b.dataset.aed)]); });
+  });
+  document.querySelectorAll('#admBody [data-a1]').forEach(function(b){
+    b.addEventListener('click', function(){
+      DELMODE = 'aone'; DELKEY = b.dataset.a1;
+      document.getElementById('delConfirm').className = 'btn danger';
+      document.getElementById('delConfirm').textContent = 'Delete This Day';
+      document.getElementById('delTitle').textContent = 'Delete this day only';
+      document.getElementById('delTask').textContent = b.dataset.task;
+      document.getElementById('delWarn').textContent =
+        'This removes only this day\'s row, including its score if it was closed. The task stays active and its other days stay. It cannot be undone.';
+      document.getElementById('delModal').classList.add('on');
+    });
+  });
+  document.querySelectorAll('#admBody [data-at]').forEach(function(b){
+    b.addEventListener('click', function(){
+      DELMODE = 'atask'; DELTASKID = b.dataset.at;
+      document.getElementById('delConfirm').className = 'btn danger';
+      document.getElementById('delConfirm').textContent = 'Delete Entire Task';
+      document.getElementById('delTitle').textContent = 'Delete the entire task (all days)';
+      document.getElementById('delTask').textContent = b.dataset.task;
+      document.getElementById('delWarn').textContent =
+        'This deletes the task completely: every day, open and completed. It will no longer show anywhere (lists, Live, Score Card) and scores are recalculated without it. This cannot be undone.';
+      document.getElementById('delModal').classList.add('on');
+    });
+  });
+}
 
 </script>
 </body>
