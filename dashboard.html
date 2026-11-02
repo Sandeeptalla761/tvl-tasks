@@ -364,9 +364,14 @@
       <div class="card">
         <div class="body">
           <div class="grid">
+            <div class="fld"><label>VIEW</label>
+              <select id="admView">
+                <option value="days">Days (every occurrence)</option>
+                <option value="master">Task Master (one row per task)</option>
+              </select></div>
             <div class="fld"><label>PERSON</label>
               <select id="admDoer"><option value="">Everyone</option></select></div>
-            <div class="fld"><label>DAYS</label>
+            <div class="fld" data-dayonly><label>DAYS</label>
               <select id="admRange">
                 <option value="today">Today</option>
                 <option value="7" selected>Last 7 days</option>
@@ -375,7 +380,7 @@
                 <option value="upcoming">Upcoming (after today)</option>
                 <option value="everything">Everything</option>
               </select></div>
-            <div class="fld"><label>STATUS</label>
+            <div class="fld" data-dayonly><label>STATUS</label>
               <select id="admStatus">
                 <option value="all">All</option>
                 <option value="open">Open</option>
@@ -388,6 +393,12 @@
                 <option value="DAILY">Daily</option>
                 <option value="RECURRING">Recurring</option>
                 <option value="ONETIME">One-time</option>
+              </select></div>
+            <div class="fld" data-masteronly style="display:none"><label>ACTIVE</label>
+              <select id="admActive">
+                <option value="all">All</option>
+                <option value="yes">Active</option>
+                <option value="no">Inactive</option>
               </select></div>
             <div class="fld"><label>SEARCH</label>
               <input type="text" id="admQ" placeholder="Task text…"></div>
@@ -1662,12 +1673,74 @@ function admInit(){
     });
   });
   document.getElementById('admPin').addEventListener('keydown', function(e){ if (e.key === 'Enter') document.getElementById('admGo').click(); });
-  ['admDoer','admRange','admStatus','admType'].forEach(function(id){
+  ['admView','admDoer','admRange','admStatus','admType','admActive'].forEach(function(id){
     document.getElementById(id).addEventListener('change', function(){ loadAdmin(); });
   });
   document.getElementById('admQ').addEventListener('keydown', function(e){ if (e.key === 'Enter') loadAdmin(); });
   document.getElementById('admRefresh').addEventListener('click', function(){ loadAdmin(); });
   document.getElementById('admLockBtn').addEventListener('click', admLockNow);
+}
+
+function admFetchMaster(f, ok, fail){
+  f.pin = ADM.pin;
+  api('adminmaster', f).then(ok).catch(fail);
+}
+
+function admRenderMaster(d){
+  ADM.rows = d.rows;
+  document.getElementById('admHead').textContent = (d.doer || 'EVERYONE').toUpperCase() + ' — TASK MASTER — ' + d.shown + ' task(s)' + (d.matching > d.shown ? ' of ' + d.matching : '');
+  var act = d.rows.filter(function(r){ return r.active; }).length;
+  document.getElementById('admKpis').innerHTML =
+    '<div class="kpi"><div class="k">TASKS</div><div class="v">' + d.rows.length + '</div></div>' +
+    '<div class="kpi g"><div class="k">ACTIVE</div><div class="v">' + act + '</div></div>' +
+    '<div class="kpi r"><div class="k">INACTIVE</div><div class="v">' + (d.rows.length - act) + '</div></div>';
+  if (!d.rows.length){ document.getElementById('admBody').innerHTML = '<div class="empty">No tasks match these filters.</div>'; return; }
+  var h = '<div style="overflow-x:auto"><table><thead><tr><th>TASK ID</th><th>TASK</th>' + (d.doer ? '' : '<th>PERSON</th>') +
+    '<th>DEPT</th><th>TYPE</th><th>FREQ</th><th>START</th><th>END</th><th>ACTIVE</th><th>DAYS</th><th></th></tr></thead><tbody>';
+  d.rows.forEach(function(r, i){
+    h += '<tr><td>' + esc(r.taskId) + '</td><td>' + esc(r.task) + '</td>' +
+      (d.doer ? '' : '<td><div class="nm">' + esc(r.doer) + '</div></td>') +
+      '<td>' + esc(r.dept) + '</td>' +
+      '<td><span class="pill ' + r.type.toLowerCase() + '">' + esc(r.type) + '</span></td>' +
+      '<td>' + esc(r.freq) + '</td><td>' + esc(r.start) + '</td><td>' + esc(r.end) + '</td>' +
+      '<td><span class="pill ' + (r.active ? 'ok' : 'late') + '">' + (r.active ? 'Yes' : 'No') + '</span></td>' +
+      '<td>' + r.days + (r.open ? ' <span class="sub">(' + r.open + ' open)</span>' : '') + '</td>' +
+      '<td style="white-space:nowrap"><button class="btn sm" data-mdays="' + i + '">View Days</button> ' +
+      '<button class="btn sm danger" data-at="' + esc(r.taskId) + '" data-task="' + esc(r.task) + '">Delete Entire Task</button></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  if (d.matching > d.shown) h += '<div class="empty">Showing the first ' + d.shown + ' of ' + d.matching + '. Narrow the filters.</div>';
+  document.getElementById('admBody').innerHTML = h;
+  document.querySelectorAll('#admBody [data-mdays]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var r = ADM.rows[Number(b.dataset.mdays)];
+      document.getElementById('admView').value = 'days';
+      document.getElementById('admDoer').value = r.doer;
+      document.getElementById('admRange').value = 'everything';
+      document.getElementById('admStatus').value = 'all';
+      document.getElementById('admType').value = '';
+      document.getElementById('admQ').value = r.taskId;
+      loadAdmin();
+    });
+  });
+  document.querySelectorAll('#admBody [data-at]').forEach(function(b){
+    b.addEventListener('click', function(){
+      DELMODE = 'atask'; DELTASKID = b.dataset.at;
+      document.getElementById('delConfirm').className = 'btn danger';
+      document.getElementById('delConfirm').textContent = 'Delete Entire Task';
+      document.getElementById('delTitle').textContent = 'Delete the entire task (all days)';
+      document.getElementById('delTask').textContent = b.dataset.task;
+      document.getElementById('delWarn').textContent = 'This deletes the task completely: its Task Master row and every day, open and completed. Scores are recalculated without it. This cannot be undone.';
+      document.getElementById('delModal').classList.add('on');
+    });
+  });
+}
+
+function admMode(){ return document.getElementById('admView').value; }
+function admApplyView(){
+  var m = admMode() === 'master';
+  document.querySelectorAll('#admMain [data-dayonly]').forEach(function(e){ e.style.display = m ? 'none' : ''; });
+  document.querySelectorAll('#admMain [data-masteronly]').forEach(function(e){ e.style.display = m ? '' : 'none'; });
 }
 
 function admFilter(){
@@ -1676,6 +1749,7 @@ function admFilter(){
     range: document.getElementById('admRange').value,
     status: document.getElementById('admStatus').value,
     type: document.getElementById('admType').value,
+    active: document.getElementById('admActive').value,
     q: document.getElementById('admQ').value
   };
 }
@@ -1684,13 +1758,14 @@ function loadAdmin(silent){
   admInit();
   if (!ADM.pin) return;
   if (!silent) document.getElementById('admBody').innerHTML = '<div class="empty"><div class="spin"></div>Loading…</div>';
-  admFetch(admFilter(), function(res){
+  admApplyView();
+  (admMode() === 'master' ? admFetchMaster : admFetch)(admFilter(), function(res){
     if (!res || !res.ok){
       if (res && res.pinFail) admLockNow();
       document.getElementById('admBody').innerHTML = '<div class="empty">' + esc((res && res.message) || 'Could not load.') + '</div>';
       return;
     }
-    admRender(res.data);
+    if (admMode() === 'master') admRenderMaster(res.data); else admRender(res.data);
   }, function(err){
     document.getElementById('admBody').innerHTML = '<div class="empty">' + esc(err.message) + '</div>';
   });
